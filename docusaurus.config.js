@@ -22,7 +22,7 @@ const config = {
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'roks531', // Usually your GitHub org/user name.
   projectName: 'rokd.github.io', // Usually your repo name.
-  deploymentBranch: 'deployment',
+  deploymentBranch: 'gh-pages',
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   trailingSlash: false,
