@@ -83,9 +83,9 @@ const config = {
         appId: 'P7L07GS7WG',
   
         // Public API key: it is safe to commit it
-        apiKey: 'bb32416c2ed8c8cb8395876055df0710',
+        apiKey: 'f4ff75bc2a7fa66a72249f759cf72292',
   
-        indexName: 'rokd_index',
+        indexName: 'rokd',
   
         // Optional: see doc section below
         contextualSearch: true,
