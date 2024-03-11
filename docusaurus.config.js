@@ -103,7 +103,7 @@ const config = {
         // searchParameters: {},
   
         // // Optional: path for search page that enabled by default (`false` to disable it)
-        // searchPagePath: 'search',
+        searchPagePath: 'search',
   
         //... other Algolia params
       },
