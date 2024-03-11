@@ -7,9 +7,11 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
+
+
 const config = {
-  title: 'test123',
-  tagline: 'Dinosaurs are cool',
+  title: "Rok's docs and blog",
+  tagline: 'Documentation and blog about tech',
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
@@ -32,9 +34,19 @@ const config = {
   // may want to replace "en" with "zh-Hans".
   i18n: {
     defaultLocale: 'en',
-    locales: ['en'],
+    locales: ['en', 'sl'],
+    localeConfigs: {
+      en: {
+        label: 'English'
+      },
+      sl: {
+        label: 'Slovenščina'
+      }
+    }
   },
-
+  // add search plugin
+  //plugins: [require.resolve('docusaurus-lunr-search')],
+  //
   presets: [
     [
       'classic',
@@ -44,15 +56,15 @@ const config = {
           sidebarPath: './sidebars.js',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
-        },
+         // editUrl:
+         //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+         },
         blog: {
           showReadingTime: true,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
-          editUrl:
-            'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+          // editUrl:
+          //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
         },
         theme: {
           customCss: './src/css/custom.css',
@@ -66,71 +78,101 @@ const config = {
     ({
       // Replace with your project's social card
       image: 'img/docusaurus-social-card.jpg',
+      algolia: {
+        // The application ID provided by Algolia
+        appId: 'P7L07GS7WG',
+  
+        // Public API key: it is safe to commit it
+        apiKey: 'bb32416c2ed8c8cb8395876055df0710',
+  
+        indexName: 'rokd_index',
+  
+        // Optional: see doc section below
+        contextualSearch: true,
+  
+        // Optional: Specify domains where the navigation should occur through window.location instead on history.push. Useful when our Algolia config crawls multiple documentation sites and we want to navigate with window.location.href to them.
+        externalUrlRegex: 'external\\.com|domain\\.com',
+  
+        // Optional: Replace parts of the item URLs from Algolia. Useful when using the same search index for multiple deployments using a different baseUrl. You can use regexp or string in the `from` param. For example: localhost:3000 vs myCompany.com/docs
+        replaceSearchResultPathname: {
+          from: '/docs/', // or as RegExp: /\/docs\//
+          to: '/',
+        },
+  
+        // Optional: Algolia search parameters
+        searchParameters: {},
+  
+        // Optional: path for search page that enabled by default (`false` to disable it)
+        searchPagePath: 'search',
+  
+        //... other Algolia params
+      },
       navbar: {
-        title: 'My Site',
+        title: "Home",
         logo: {
           alt: 'My Site Logo',
-          src: 'img/logo.svg',
+          src: 'img/logo.png',
+          srcDark: 'img/logo_dark_mode.png',
+          width: 70,
+          height: 200,
         },
         items: [
+          {to: '/blog', label: 'Blog', position: 'left'},
           {
             type: 'docSidebar',
             sidebarId: 'tutorialSidebar',
             position: 'left',
-            label: 'Tutorial',
+            label: 'Docs',
           },
-          {to: '/blog', label: 'Blog', position: 'left'},
+          {to: '/about', label: 'About', position: 'left'}, // gets the file from src/pages/about.md
+        //  {
+        //    type: 'localeDropdown',
+         //   position: 'right',
+        //  },
+         // {
+         //   type: 'search',
+         //   position: 'center',
+        //  },
           {
-            href: 'https://github.com/facebook/docusaurus',
-            label: 'GitHub',
+            href: 'mailto:rok.damjanic@yahoo.com',
             position: 'right',
+            className: 'header-email-link',
+            'aria-label': 'Email',
           },
+          {
+            href: 'https://www.linkedin.com/in/rok-damjanic/',
+            position: 'right',
+            className: 'header-linkedin-link',
+            'aria-label': 'LinkedIn',
+          },
+          {
+            href: 'https://github.com/roks531',
+            position: "right",
+            className: "header-github-link",
+            "aria-label": "GitHub repository",
+          },
+          
         ],
       },
       footer: {
-        style: 'dark',
         links: [
           {
-            title: 'Docs',
-            items: [
-              {
-                label: 'Tutorial',
-                to: '/docs/intro',
-              },
-            ],
+            label: 'Github',
+            href: 'https://github.com/roks531',
           },
           {
-            title: 'Community',
-            items: [
-              {
-                label: 'Stack Overflow',
-                href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-              },
-              {
-                label: 'Discord',
-                href: 'https://discordapp.com/invite/docusaurus',
-              },
-              {
-                label: 'Twitter',
-                href: 'https://twitter.com/docusaurus',
-              },
-            ],
+            label: 'Linkedin',
+            href: 'https://www.linkedin.com/in/rok-damjanic/',
           },
-          {
-            title: 'More',
-            items: [
-              {
-                label: 'Blog',
-                to: '/blog',
-              },
-              {
-                label: 'GitHub',
-                href: 'https://github.com/facebook/docusaurus',
-              },
-            ],
-          },
+          // {
+          //   html: `
+          //       <a href="https://www.netlify.com" target="_blank" rel="noreferrer noopener" aria-label="Deploys by Netlify">
+          //         <img src="https://www.netlify.com/img/global/badges/netlify-color-accent.svg" alt="Deploys by Netlify" width="114" height="51" />
+          //       </a>
+          //     `,
+          // },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} Rok Damjanić`,
       },
       prism: {
         theme: prismThemes.github,

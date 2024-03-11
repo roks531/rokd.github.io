@@ -99,5 +99,15 @@ On Github we need to generate a new branch named `gh-pages` and under settings, 
 
 We could also do that manually using `npm run deploy`
 
+### Plugins
+
+For example to add docusaurus-lunr-search use:
+
+`npm i docusaurus-lunr-search  --save`
+
+And add `plugins: [require.resolve('docusaurus-lunr-search')],` to the docusaurus config file.
+
+Then all you need to do is `npm run build` and `npm run serve` to generate the indexes and test it.
+
 
 
