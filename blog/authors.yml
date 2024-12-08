@@ -1,6 +1,10 @@
 rok:
   name: Rok Damjanić
-  title: Nature lover and Tech enthusiast
+  title: IT, sports, nature 
   url: https://linkedin.com/in/rok-damjanic
   image_url: /img/profile_photo.jpg
+  socials:
+    # x: 
+    linkedin: rok-damjanic
+    github: roks531
 

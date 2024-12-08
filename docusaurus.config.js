@@ -10,8 +10,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 
 const config = {
-  title: "Rok's docs and blog",
-  tagline: 'Documentation and blog about tech',
+  title: " ",
+  tagline: '',
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
@@ -28,6 +28,9 @@ const config = {
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
   trailingSlash: false,
+  future: {
+    experimental_faster: true,
+  },
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -45,7 +48,14 @@ const config = {
     }
   },
   // add search plugin
-  //plugins: [require.resolve('docusaurus-lunr-search')],
+  plugins: [
+    [
+      './plugins/recent-blog-posts',  // Path to your custom plugin
+      {
+        showReadingTime: true,  // Add other options if needed
+      },
+    ],
+  ],
   //
   presets: [
     [
@@ -59,13 +69,14 @@ const config = {
          // editUrl:
          //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
          },
-        blog: {
-          showReadingTime: true,
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
-          // editUrl:
-          //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
-        },
+         blog: false,
+        // blog: {
+        //   showReadingTime: true, 
+        //   // Please change this to your repo.
+        //   // Remove this to remove the "edit this page" links.
+        //   // editUrl:
+        //   //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
+        // },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -113,8 +124,9 @@ const config = {
           alt: 'My Site Logo',
           src: 'img/logo.png',
           srcDark: 'img/logo_dark_mode.png',
-          width: 70,
-          height: 200,
+         // className: 'move-logo', 
+         // width: 70,
+         // height: 200,
         },
         items: [
           {to: '/blog', label: 'Blog', position: 'left'},

@@ -6,10 +6,10 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #045ab1;
+  --ifm-color-primary: #398300;
   --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
+  --ifm-color-primary-darker: #0ebb5c;
+  --ifm-color-primary-darkest: #13d66b;
   --ifm-color-primary-light: #33925d;
   --ifm-color-primary-lighter: #357199;
   --ifm-color-primary-lightest: #3cad6e;
@@ -22,7 +22,7 @@
   --ifm-color-primary: #d49f0b;
   --ifm-color-primary-dark: #21af90;
   --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
+  --ifm-color-primary-darkest: #1bdbb2;
   --ifm-color-primary-light: #29d5b0;
   --ifm-color-primary-lighter: #32d8b4;
   --ifm-color-primary-lightest: #4fddbf;
@@ -35,13 +35,26 @@
   gap: 16px; /* Adjust the value to the desired space between buttons */
 }
 
+/* Default styles */
 html[data-theme='light'] .hero {
-  background-color: #ffffff;
-  /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
+  background-color: #ffffff; /* White background */
+  background-image: url("/static/img/background2.png");
+  background-repeat: no-repeat; /* Prevent the background image from repeating */
+  background-size: 100% auto; /* Make the background image fill the width */
+  background-position: center; /* Position the background image in the center */
+}
+
+/* Default styles */
+html[data-theme='dark'] .hero {
+  background-color: #1b1b1d; /* White background */
+  background-image: url("/static/img/background2.png");
+  background-repeat: no-repeat; /* Prevent the background image from repeating */
+  background-size: 100% auto; /* Make the background image fill the width */
+  background-position: center; /* Position the background image in the center */
 }
 
 html[data-theme='light'] .hero__title {
-  color: #045ab1;
+  color: #398300;
   /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
 }
 
@@ -49,9 +62,21 @@ html[data-theme='light'] .hero__subtitle {
   color: #045ab1;
   /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
 }
+
+
 .button:not(:last-child) {
-  margin-right: 16px; /* Adjust the value to the desired space between buttons */
+  margin-right: 35px; /* Adjust the value to the desired space between buttons*/
 }
+
+html[data-theme='dark'] .hero__title {
+  color: #398300; /* Set the color */
+}
+
+html[data-theme='dark'] .hero__subtitle {
+  color: #045ab1;
+  /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
+}
+
 
 /*              GITHUB ZGORAJ          */
 .header-github-link:hover {
@@ -122,14 +147,20 @@ nav.navbar .navbar__item:hover {
   border-bottom: 3px solid; /* Adjust the thickness as needed */
 }
 
+
+.DocSearch-Button-Container {
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+}
 /* Change background color of navbar items */
 
 html[data-theme='light'] .navbar {
-  background-color: #f3f9fc; /* Replace with your desired color code */
+  background-color: #ffffff; /* Replace with your desired color code */
 }
 
 html[data-theme='light'] nav.navbar .navbar__items {
-  background-color: #f3f9fc; /* Replace with your desired color code */
+  background-color: #ffffff; /* Replace with your desired color code */
 }
 
 .footer {
@@ -137,4 +168,108 @@ html[data-theme='light'] nav.navbar .navbar__items {
 }
 
 
+/* Animation for the "Naslov1" - Tech Animation */
+@keyframes moveTech {
+  0% {
+    transform: translateX(-100px);
+  }
+  50% {
+    transform: translateX(50px);
+  }
+  100% {
+    transform: translateX(0px);
+  }
+}
 
+.move-tech {
+  animation: moveTech 3s ease-in-out infinite;
+}
+
+/* Animation for the "Naslov2" - Nature Animation */
+@keyframes moveNature {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.move-nature {
+  animation: moveNature 5s ease-in-out infinite;
+}
+
+/* Additional styling for images */
+.featureImage {
+  max-width: 100%;
+  transition: all 0.3s ease-in-out;
+}
+
+/* Additional feature styling */
+.features {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* Styling for recent posts */
+.recent-posts {
+  margin-top: 40px;
+}
+
+.recent-posts .container {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.recent-posts .col {
+  flex: 1 1 30%;
+  text-align: center;
+}
+
+
+/* Animation for the site logo */
+@keyframes moveUpAndDown {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.move-logo {
+  animation: moveUpAndDown 3s ease-in-out infinite;
+}
+
+
+
+.heroTitle {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.heroDescription {
+  font-size: 1.5rem;
+  color: #34495e;
+  margin-top: 10px;
+}
+
+.card {
+  background-color: #ffffff;
+  border-radius: 10px;
+  padding: 20px;
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  transform: scale(1.02);
+}
