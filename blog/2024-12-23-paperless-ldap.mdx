@@ -1,0 +1,209 @@
+---
+slug: paperless-ngx-ldap
+title: ldap3 in paperless-ngx
+authors: [rok]
+tags: [paperless-ngx, ldap3]
+image: /img/blog_img/2024-12-23-paperles-ngx.png
+---
+
+# Integrating LDAP Authentication with Paperless-ngx using `ldap3`
+
+In this post, I will explain how I integrated LDAP authentication into [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx) using the `ldap3` library. By leveraging LDAP, we can centrally manage user authentication, ensuring secure and streamlined access to Paperless-ngx.
+
+## Custom LDAP Authentication Backend
+
+The first step is creating a custom Django authentication backend. This backend uses `ldap3` to authenticate users against the LDAP directory. Here's the complete implementation:
+
+```python title="ldap_auth_backend.py"
+
+import logging
+from django.contrib.auth.models import User
+from django.contrib.auth.backends import BaseBackend
+from ldap3 import Server, Connection, ALL, NTLM, SUBTREE
+
+# LDAP Server Configuration
+LDAP_SERVER = "ldap://example.com:3268"
+LDAP_AUTH_SEARCH_BASE = "ou=it,ou=departments,dc=example,dc=com"
+LDAP_AUTH_CONNECTION_USERNAME = "cn=ldapadmin,ou=users,dc=example,dc=com"
+LDAP_AUTH_CONNECTION_PASSWORD = "pass of ldapadmin"
+
+logger = logging.getLogger(__name__)
+
+class LDAPBackend(BaseBackend):
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        server = Server(LDAP_SERVER, get_info=ALL)
+        conn = Connection(server, user=LDAP_AUTH_CONNECTION_USERNAME, password=LDAP_AUTH_CONNECTION_PASSWORD, auto_bind=True)
+
+        # Define the LDAP search filter to find the user by sAMAccountName
+        search_filter = f"(sAMAccountName={username})"
+
+        try:
+            # Search for the user in LDAP
+            conn.search(
+                search_base=LDAP_AUTH_SEARCH_BASE,
+                search_filter=search_filter,
+                search_scope=SUBTREE,
+                attributes=['sAMAccountName', 'mail', 'givenName', 'sn']
+            )
+
+            if conn.entries:
+                # If the user exists, attempt to bind with user's credentials to authenticate
+                user_dn = conn.entries[0].entry_dn
+                user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
+
+                if user_conn.bind():
+                    # Get or create the Django user
+                    user, created = User.objects.get_or_create(username=username)
+                    if created:
+                        user.set_unusable_password()
+                    user.is_staff = True  # Set staff status for LDAP users
+                    user.save()
+                    logger.info(f"User {username} authenticated and {'created' if created else 'updated'} in Django.")
+                    return user
+        except Exception as e:
+            logger.warning(f"LDAP authentication failed for user {username}: {e}")
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None
+```
+
+## Key Features of the Backend
+
+- **Centralized Authentication**: User credentials are verified against the LDAP server.
+- **Dynamic User Management**: Users are automatically created or updated in the local Django database upon successful authentication.
+- **Logging**: Authentication attempts are logged for debugging and auditing purposes.
+
+## Adding LDAP Support to Paperless-ngx
+
+To integrate this backend into Paperless-ngx, I created a custom Docker image and updated the necessary configuration files.
+
+### Custom Docker Image
+
+I extended the official Paperless-ngx Docker image to include the `ldap3` library and the custom authentication backend. Here's the `Dockerfile`:
+
+```dockerfile
+# Start from the official paperless-ngx image
+FROM ghcr.io/paperless-ngx/paperless-ngx:latest
+
+# Install LDAP library
+RUN pip install ldap3
+
+# Copy the custom LDAP backend code
+COPY ldap_auth_backend.py /usr/src/paperless/src/paperless/ldap_auth_backend.py
+
+# Update settings.py to include the LDAP backend using a sed command
+RUN sed -i "/^AUTHENTICATION_BACKENDS = /a 'paperless.ldap_auth_backend.LDAPBackend'," /usr/src/paperless/src/paperless/settings.py
+```
+
+### Build and Run the Docker Image
+
+
+
+
+Use the following commands to build and run the custom Docker image:
+
+```bash
+# Build the Docker image
+docker build -t paperless-ngx-ldap .
+
+# Run the Docker container
+docker run -d \
+  --name paperless-ngx-ldap \
+  -e PAPERLESS_DBHOST=your_db_host \
+  -e PAPERLESS_DBPASS=your_db_password \
+  -e PAPERLESS_TIMEZONE=your_timezone \
+  -p 8000:8000 \
+  paperless-ngx-ldap
+```
+
+#### Docker compose example with existing postgresql
+
+<details>
+  <summary>docker-compose.yml example</summary>
+
+  This is an example docker compose file
+
+  ```yaml title="docker-compose.yml"
+  services:
+  broker:
+    image: docker.io/library/redis:7
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+
+  webserver:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - broker
+      - gotenberg
+      - tika
+    ports:
+      - "8000:8000"
+    volumes:
+      - /home/user/docker-compose/paperless-ngx/data/:/usr/src/paperless/data
+      - /home/user/docker-compose/paperless-ngx/media/:/usr/src/paperless/media
+      - /home/user/docker-compose/paperless-ngx/export:/usr/src/paperless/export
+      - /home/user/docker-compose/paperless-ngx/consume/:/usr/src/paperless/consume
+
+    env_file: docker-compose.env
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_LDAP_PIP_INSTALL: "true"
+
+  gotenberg:
+    image: docker.io/gotenberg/gotenberg:7.8
+    restart: unless-stopped
+
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
+
+  tika:
+    image: ghcr.io/paperless-ngx/tika:latest
+    restart: unless-stopped
+
+  volumes:
+    data:
+    media:
+    redisdata:
+
+  ```
+</details>
+
+
+<details>
+
+<summary>environment example</summary>
+
+ ```ìni title="docker-compose.env"
+    PAPERLESS_TIME_ZONE=Europe/Ljubljana
+    PAPERLESS_OCR_LANGUAGE=eng+slv+deu
+    PAPERLESS_SECRET_KEY=OO5345345349urerexuRj1nkKoUmKzJJcq2vBik4Cwre0luVS9iapnLP5
+    PAPERLESS_OCR_LANGUAGES=eng slv deu
+    PAPERLESS_DBENGINE=postgresql
+    PAPERLESS_DBHOST=192.168.1.2
+    PAPERLESS_DBPORT=5432
+    PAPERLESS_DBUSER: paperless
+    PAPERLESS_DBPASS: strongpass
+    PAPERLESS_URL=https://paperless.example.com
+    PAPERLESS_CSRF_TRUSTED_ORIGINS=https://paperless.example.com,https://example.com
+    PAPERLESS_ALLOWED_HOSTS=paperless.paperless.example.com,192.168.1.4,example.com
+    PAPERLESS_CORS_ALLOWED_HOSTS=https://paperless.example.com,https://example.com # can be set using PAPERLESS_URL
+```
+</details>
+
+
+
+
+## Final Thoughts
+
+By integrating LDAP authentication into Paperless-ngx, I was able to streamline user management and centralize authentication using our existing LDAP infrastructure. The flexibility of Paperless-ngx and the power of `ldap3` made this integration straightforward and effective. I hope this guide helps others looking to implement similar functionality. There are also others who managed to create usefull integrations on (didn't work for me though): https://github.com/paperless-ngx/paperless-ngx/discussions/3228.

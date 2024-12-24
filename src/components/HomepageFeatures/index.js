@@ -1,58 +1,98 @@
+import React, { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css'; // Local styles
 import recentPosts from '@site/.docusaurus/recent-posts.json'; // Import recent posts
-
-import { motion } from 'framer-motion'; // For animations
-import { useEffect, useRef } from 'react'; // For hooks
+import ParticlesBackground from './ParticlesBackground';
+import { motion, AnimatePresence } from 'framer-motion'; // For animations
 import Typed from 'typed.js'; // Import Typed.js
 
-// Images
-import slika1_naslovna from '@site/static/img/logo.png';
-import slika2_naslovna from '@site/static/img/logo.png'; 
+// Image Carousel
+function ImageCarousel() {
+  const images = [
+    '/img/index_page/DSC07939.jpg/',
+    '/img/index_page/DSC08325.JPG/',
+    '/img/index_page/DSC09816.JPG/',
+    '/img/index_page/DSC08049.jpg/',
+    '/img/index_page/DSC09127.JPG/',
+    '/img/index_page/DSC09880.JPG/',
+    '/img/index_page/DSC09775.JPG/',
+    '/img/index_page/DSC07954.jpg/',
+    '/img/index_page/DSC07752.jpg/',
+    '/img/index_page/DSC09246.JPG/',
+    '/img/index_page/DSC08720.JPG/',
+    '/img/index_page/DSC09403.JPG/',
+    '/img/index_page/DSC09383.JPG/',
+    '/img/index_page/DSC09130.JPG/',
+    '/img/index_page/DSC08249.jpg/',
+    '/img/index_page/DSC09390.JPG/',
+    '/img/index_page/DSC09565.jpg/',
+    '/img/index_page/DSC09446.JPG/',
+    '/img/index_page/DSC09298.JPG/',
+    '/img/index_page/DSC08849.JPG/',
+    '/img/index_page/DSC09524.JPG/',
+    '/img/index_page/DSC09750.JPG/',
+    '/img/index_page/DSC09802.JPG/',
+    '/img/index_page/DSC07960.jpg/',
+    '/img/index_page/DSC09625.JPG/',
+    '/img/index_page/DSC07979.jpg/',
+    '/img/index_page/DSC09495.JPG/',
+    '/img/index_page/DSC08515.jpg/'
+  ];
+  
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-// Features list
-const FeatureList = [
-  // {
-  //   title: 'Tech Insights',
-  //   Image: slika1_naslovna,
-  //   description: 'Explore coding tips, projects, and solutions for tech challenges.',
-  //   animationClass: 'move-tech',
-  // },
-  // {
-  //   title: 'Outdoor Adventures',
-  //   Image: slika2_naslovna,
-  //   description: 'Experience the beauty of the outdoors through my hiking journeys.',
-  //   animationClass: 'move-nature',
-  // },
-];
+  // Handle automatic image transitions
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
+    }, 3000); // Change every 3 seconds
+    return () => clearInterval(interval);
+  }, [images.length]);
 
-// Feature component
-function Feature({ Image, title, description, animationClass }) {
+  // Handle manual navigation
+  const handleNext = () => setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
+  const handlePrev = () => setCurrentIndex((prevIndex) => (prevIndex - 1 + images.length) % images.length);
+
   return (
-    <motion.div
-      className={clsx('col col--6 col--offset-3')}
-      initial={{ opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 1, ease: 'easeOut' }}
-    >
-      <div className="text--center">
-        <motion.img
-          className={`${styles.featureImage} ${animationClass}`}
-          src={Image}
-          alt={title}
-          whileHover={{ scale: 1.05 }}
-        />
+    <div className={styles.carouselContainer}>
+      <div className={styles.imageWrapper}>
+        <AnimatePresence>
+          {images.map((src, index) => (
+            index === currentIndex && (
+              <motion.img
+                key={src}
+                src={src}
+                alt={`Slide ${index + 1}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1 }}
+                className={styles.carouselImage}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  zIndex: 0, // Ensure the image is behind text and buttons
+                }}
+              />
+            )
+          ))}
+        </AnimatePresence>
       </div>
-      <div className="text--center padding-horiz--md">
-        <Heading as="h2">{title}</Heading>
-        <p>{description}</p>
-      </div>
-    </motion.div>
+
+      {/* Navigation Buttons */}
+      <button className={styles.prev} onClick={handlePrev}>❮</button>
+      <button className={styles.next} onClick={handleNext}>❯</button>
+    </div>
   );
 }
 
-// Recent posts component
+
+// Recent Posts Component
 function RecentPosts({ posts }) {
   return (
     <div className="recent-posts">
@@ -93,33 +133,30 @@ function RecentPosts({ posts }) {
   );
 }
 
-// Main component
+// Main Homepage Component
 export default function HomepageFeatures() {
-  // Create a reference for the element where you want the typewriter effect
   const typedElementRef = useRef(null);
 
-  // Initialize typed.js inside useEffect
   useEffect(() => {
     const options = {
-      strings: ['Welcome to My Space'], // The text you want to type
-      typeSpeed: 70, // Speed of typing (in ms)
-      backSpeed: 50, // Speed of erasing (in ms)
-      backDelay: 1000, // Delay before erasing starts (in ms)
-      startDelay: 500, // Delay before typing starts (in ms)
-      loop: false, // Set to true for continuous typing
+      strings: ['Welcome to My Page'],
+      typeSpeed: 30,
+      backSpeed: 50,
+      backDelay: 1000,
+      startDelay: 500,
+      loop: false,
     };
 
-    // Create a new Typed.js instance on the element referenced by typedElementRef
     const typed = new Typed(typedElementRef.current, options);
 
-    // Cleanup the Typed.js instance when the component is unmounted
-    return () => {
-      typed.destroy();
-    };
+    return () => typed.destroy();
   }, []);
 
   return (
     <section className={styles.features}>
+      {/* Include the ParticlesBackground component */}
+      <ParticlesBackground />
+      
       <div className="container">
         {/* Hero Section */}
         <motion.div
@@ -129,26 +166,24 @@ export default function HomepageFeatures() {
           transition={{ duration: 1 }}
         >
           <Heading as="h1" className={styles.heroTitle}>
-            <span ref={typedElementRef}></span> {/* Typewriter effect will be applied here */}
+            <span ref={typedElementRef}></span> {/* Typewriter effect */}
           </Heading>
           <p className={styles.heroDescription}>
-            Here, I share my experiences and knowledge from the tech world, covering the projects I work on, and solutions I’ve found useful. It’s a mix of practical insights and things I want to keep handy for future reference – and maybe you’ll find them helpful too.
-
-            Beyond tech, I also write about my outdoor adventures – especially hiking and exploring mountains. If you’re into nature or looking for ideas for your next trip, you might enjoy those posts as well.
-
-            This site is just a personal space to share the things I’m passionate about, both in technology and the great outdoors. Hope you find something here that sparks your interest!
+          Here, I share my experiences and knowledge from the tech world, covering the projects I work on, and solutions I’ve found useful. It’s a mix of practical insights and things I want to keep handy for future reference – and maybe you’ll find them helpful too.
+          Beyond tech, I also write about my outdoor adventures – especially hiking and exploring mountains. If you’re into nature or looking for ideas for your next trip, you might enjoy those posts as well.
+          This site is just a personal space to share the things I’m passionate about, both in technology and the great outdoors. Hope you find something here that sparks your interest!
           </p>
         </motion.div>
 
-        {/* Features */}
-        <div className="row">
-          {FeatureList.map((props, idx) => (
-            <Feature key={idx} {...props} />
-          ))}
+        {/* Image Carousel */}
+        <div className="text--center" style={{ margin: '2rem 0' }}>
+          <ImageCarousel />
         </div>
 
-        {/* Recent Posts */}
-        <RecentPosts posts={recentPosts} />
+        {/* Recent Posts Section */}
+        <div style={{ marginTop: '4rem' }}>
+          <RecentPosts posts={recentPosts} />
+        </div>
       </div>
     </section>
   );

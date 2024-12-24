@@ -52,7 +52,10 @@ const config = {
     [
       './plugins/recent-blog-posts',  // Path to your custom plugin
       {
-        showReadingTime: true,  // Add other options if needed
+        showReadingTime: true, 
+        postsPerPage: 'ALL',
+        blogSidebarCount: 'ALL', 
+        blogSidebarTitle: 'All posts',// Add other options if needed
       },
     ],
   ],
@@ -188,7 +191,8 @@ const config = {
       },
       prism: {
         theme: prismThemes.github,
-        darkTheme: prismThemes.dracula,
+        darkTheme: prismThemes.palenight,
+        additionalLanguages: ['plsql','http', 'bash', 'sql', 'docker', 'yaml', 'ini'],
       },
     }),
 };

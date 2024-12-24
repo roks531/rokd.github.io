@@ -1,3 +1,5 @@
 build/
 node_modules/
 .docusaurus/
+blog_bck/
+docs_bck/
