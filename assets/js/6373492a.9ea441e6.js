@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkdocusaurus_osebna=self.webpackChunkdocusaurus_osebna||[]).push([["36"],{3668:function(o){o.exports=JSON.parse('{"metadata":{"permalink":"/rokd.github.io/blog","page":1,"postsPerPage":1,"totalPages":1,"totalCount":1,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
