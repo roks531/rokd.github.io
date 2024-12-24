@@ -156,15 +156,21 @@ nav.navbar .navbar__item:hover {
 /* Change background color of navbar items */
 
 html[data-theme='light'] .navbar {
-  background-color: #ffffff; /* Replace with your desired color code */
+  background-color: #eeeeee; /* Replace with your desired color code */
 }
 
 html[data-theme='light'] nav.navbar .navbar__items {
-  background-color: #ffffff; /* Replace with your desired color code */
+  background-color: #eeeeee; /* Replace with your desired color code */
 }
 
-.footer {
-  padding: 0.5rem; /* Adjust the padding to control the height */
+html[data-theme='light'] .footer {
+  padding: 0.5rem;
+  background-color: #eeeeee; /* Adjust the padding to control the height */
+}
+
+
+html[data-theme='dark'] .footer {
+  padding: 0.5rem;/* Adjust the padding to control the height */
 }
 
 
@@ -252,12 +258,6 @@ html[data-theme='light'] nav.navbar .navbar__items {
 }
 
 
-.heroTitle {
-  font-size: 3rem;
-  font-weight: bold;
-  color: #2c3e50;
-}
-
 .heroDescription {
   font-size: 1.5rem;
   color: #34495e;
@@ -265,7 +265,7 @@ html[data-theme='light'] nav.navbar .navbar__items {
 }
 
 html[data-theme='light'] .card {
-  background-color: #ffffff;
+  background-color: #eeeeee;
   border-radius: 10px;
   padding: 20px;
   transition: transform 0.2s;
@@ -276,7 +276,7 @@ html[data-theme='light'] .card {
   transform: scale(1.02);
 }
 
-#particles-js {
+html[data-theme='light'] #particles-js {
   position: absolute;
   width: 100%;
   height: 100%;
@@ -285,5 +285,4 @@ html[data-theme='light'] .card {
   z-index: -1;
   background: #ffffffea; /* Background color */
 }
-
 
