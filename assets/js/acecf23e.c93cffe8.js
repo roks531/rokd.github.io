@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkdocusaurus_osebna=self.webpackChunkdocusaurus_osebna||[]).push([["627"],{7548:function(o){o.exports=JSON.parse('{"blogBasePath":"/rokd.github.io/blog","blogTitle":"Blog","authorsListPath":"/rokd.github.io/blog/authors"}')}}]);
