@@ -1,0 +1,91 @@
+# Proxmox wifi
+
+### Wifi on proxmox is slow
+When I tested this configuration it worked, however the speedes for example on a virtualized TrueNAS where less then half of those on LAN.
+
+### On the router setup the destination and gateway
+For me I am using Netgear Nighthawk R7000. The settings can be found at `Advanced` ➔ `Routing`
+- **Destination:** 192.168.3.0 (IPs that will be used by VMs)
+- **Netmask:** 255.255.255.0
+- **Gateway:** 192.168.1.4 (IP of the wifi adapter on proxmox)
+
+### Install `wpasupplicant`
+
+```bash
+sudo apt install wpasupplicant
+```
+
+### Edit `/etc/wpa_supplicant/wpa_supplicant.conf`
+
+```bash
+sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
+```
+
+Add the following content:
+
+```txt
+network={
+   ssid="wifi"
+   psk="pass"
+}
+```
+
+### Edit `/etc/systemd/system/dbus-fi.w1.wpa_supplicant1.service`
+
+```bash
+sudo nano /etc/systemd/system/dbus-fi.w1.wpa_supplicant1.service
+```
+
+Modify the line (add the config path and add you adapters ID, eg. `wlp5s0`):
+
+```bash
+ExecStart=/sbin/wpa_supplicant -u -s -c /etc/wpa_supplicant/wpa_supplicant.conf -i wlp5s0
+```
+
+### With working access to Proxmox, create SDN config (Datacenter --> SDN)
+
+- **Zones:** Simple, ID = Zone1 (use any name you like for ID)
+- **Vnet:** Name = vnet1 (use any name you like for Name), Zone = Zone1 (must match Zone ID)
+- **Subnet:** Subnet = 192.168.3.0/24, Gateway = 192.168.3.1
+
+## Configure `/etc/network/interfaces`
+
+```ini
+auto lo
+iface lo inet loopback
+
+iface enp6s0 inet manual
+
+auto wlp5s0
+iface wlp5s0 inet manual
+       address 192.168.1.4/24
+       gateway 192.168.1.1
+       wpa-conf /etc/wpa_supplicant/wpa_supplicant.conf
+
+auto vmbr0
+iface vmbr0 inet static
+       address 192.168.2.1/24
+       bridge-ports none
+       bridge-stp off
+       bridge-fd 0
+
+
+iface vnet1 inet static
+       address 192.168.3.1/24
+       bridge-ports none
+       bridge-stp off
+       bridge-fd 0
+       post-up echo 1 > /proc/sys/net/ipv4/ip_forward
+       post-up iptables -t nat -A POSTROUTING -s '192.168.3.0/24' -o wlp5s0 -j MASQUERADE
+       post-down iptables -t nat -D POSTROUTING -s '192.168.3.0/24' -o wlp5s0 -j MASQUERADE
+       post-up   iptables -t raw -I PREROUTING -i fwbr+ -j CT --zone1
+       post-down iptables -t raw -D PREROUTING -i fwbr+ -j CT --zone1
+
+source /etc/network/interfaces.d/*
+```
+
+### Restart networking
+
+```bash
+sudo systemctl restart networking
+```

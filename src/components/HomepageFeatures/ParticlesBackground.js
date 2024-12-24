@@ -1,10 +1,23 @@
-import React, { useEffect } from 'react';
-import 'particles.js'; // Import particles.js globally
+import React, { useEffect, useState } from 'react';
+import BrowserOnly from '@docusaurus/BrowserOnly';
 
 const ParticlesBackground = () => {
+  const [particlesJsLoaded, setParticlesJsLoaded] = useState(false);
+
   useEffect(() => {
-    // Check if we're in the browser
-    if (typeof window !== 'undefined' && window.particlesJS) {
+    // Dynamically import particles.js only in the client side
+    if (typeof window !== 'undefined' && !particlesJsLoaded) {
+      import('particles.js').then(() => {
+        setParticlesJsLoaded(true);
+      }).catch((error) => {
+        console.error('Failed to load particles.js:', error);
+      });
+    }
+  }, [particlesJsLoaded]);
+
+  useEffect(() => {
+    // Once particles.js is loaded, initialize the particles effect
+    if (particlesJsLoaded && typeof window !== 'undefined' && window.particlesJS) {
       window.particlesJS('particles-js', {
         particles: {
           number: {
@@ -63,23 +76,25 @@ const ParticlesBackground = () => {
         },
         retina_detect: true, // Enable retina display for high-res screens
       });
-    } else {
-      console.error('particles.js is not loaded or window is undefined');
     }
-  }, []); // Empty dependency array to ensure it runs only once after component mount
+  }, [particlesJsLoaded]); // Run this effect when particles.js is loaded
 
   return (
-    <div
-      id="particles-js"
-      style={{
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
-        top: 0,
-        left: 0,
-        zIndex: -1,
-      }}
-    />
+    <BrowserOnly fallback={<div>Loading...</div>}>
+      {() => (
+        <div
+          id="particles-js"
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            top: 0,
+            left: 0,
+            zIndex: -1,
+          }}
+        />
+      )}
+    </BrowserOnly>
   );
 };
 
