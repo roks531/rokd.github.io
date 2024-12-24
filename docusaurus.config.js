@@ -94,10 +94,10 @@ const config = {
       image: 'img/logo.png',
       algolia: {
         // The application ID provided by Algolia
-        appId: 'P7L07GS7WG',
+        appId: 'JV67CWDNZ4',
   
         // Public API key: it is safe to commit it
-        apiKey: 'f4ff75bc2a7fa66a72249f759cf72292',
+        apiKey: 'f8f4060cbdfc7e5dd0be1c88c1162a1c',
   
         indexName: 'rokd',
   
