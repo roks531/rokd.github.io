@@ -35,13 +35,16 @@
   gap: 16px; /* Adjust the value to the desired space between buttons */
 }
 
+.hero .hero--primary .heroBanner_qdFl .container {
+  visibility: hidden;
+}
 /* Default styles */
 html[data-theme='light'] .hero {
   background-color: #ffffff; /* White background */
   background-image: url("/static/img/background2.png");
   background-repeat: no-repeat; /* Prevent the background image from repeating */
+  background-attachment: fixed;
   background-size: 100% auto; /* Make the background image fill the width */
-  background-position: center; /* Position the background image in the center */
 }
 
 /* Default styles */

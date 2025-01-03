@@ -24,13 +24,13 @@ const ParticlesBackground = () => {
             value: 50, // Number of particles
           },
           color: {
-            value: '#808080', // Grey color for the particles
+            value: '#398300', // Grey color for the particles
           },
           shape: {
-            type: 'circle', // Particle shape
+            type: 'edge', // Particle shape
           },
           opacity: {
-            value: 0.15, // Low opacity for barely visible particles
+            value: 0.1, // Low opacity for barely visible particles
             random: false, // Don't randomize opacity
             anim: {
               enable: false,
@@ -39,7 +39,7 @@ const ParticlesBackground = () => {
             },
           },
           size: {
-            value: 5, // Smaller particles
+            value: 15, // Smaller particles
             random: true, // Make particles vary in size
             anim: {
               enable: true,
@@ -49,7 +49,7 @@ const ParticlesBackground = () => {
           },
           line_linked: {
             enable: true, // Enable lines between particles
-            distance: 150,
+            distance: 100,
             color: '#808080', // Grey color for the lines
             opacity: 0.3, // Make the lines less visible
             width: 1,
