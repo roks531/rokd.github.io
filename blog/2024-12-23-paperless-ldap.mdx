@@ -12,10 +12,94 @@ In this post, I will explain how I integrated LDAP authentication into [Paperles
 
 ## Custom LDAP Authentication Backend
 
-The first step is creating a custom Django authentication backend. This backend uses `ldap3` to authenticate users against the LDAP directory. Here's the complete implementation:
+The first step is creating a custom Django authentication backend. This backend uses `ldap3` to authenticate users against the LDAP directory. Here's the complete implementation also transfering groups from LDAP:
 
 ```python title="ldap_auth_backend.py"
 
+import logging
+from django.contrib.auth.models import User, Group
+from django.contrib.auth.backends import BaseBackend
+from ldap3 import Server, Connection, ALL, SUBTREE
+
+# LDAP Server Configuration
+LDAP_SERVER = "ldap://example.com:3268"
+LDAP_AUTH_SEARCH_BASE = "ou=it,ou=departments,dc=example,dc=com"
+LDAP_AUTH_CONNECTION_USERNAME = "cn=ldapadmin,ou=users,dc=example,dc=com"
+LDAP_AUTH_CONNECTION_PASSWORD = "pass of ldapadmin"
+
+logger = logging.getLogger(__name__)
+
+class LDAPBackend(BaseBackend):
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        server = Server(LDAP_SERVER, get_info=ALL)
+        conn = Connection(server, user=LDAP_AUTH_CONNECTION_USERNAME, password=LDAP_AUTH_CONNECTION_PASSWORD, auto_bind=True)
+
+        # Define the LDAP search filter to find the user by sAMAccountName
+        search_filter = f"(sAMAccountName={username})"
+
+        try:
+            # Search for the user in LDAP
+            conn.search(
+                search_base=LDAP_AUTH_SEARCH_BASE,
+                search_filter=search_filter,
+                search_scope=SUBTREE,
+                attributes=['sAMAccountName', 'mail', 'givenName', 'sn', 'memberOf']
+            )
+
+            if conn.entries:
+                # If the user exists, attempt to bind with user's credentials to authenticate
+                user_dn = conn.entries[0].entry_dn
+                user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
+
+                if user_conn.bind():
+                    # Extract user details from LDAP entry
+                    ldap_entry = conn.entries[0]
+                    first_name = ldap_entry.givenName.value if hasattr(ldap_entry, 'givenName') else ""
+                    last_name = ldap_entry.sn.value if hasattr(ldap_entry, 'sn') else ""
+                    email = ldap_entry.mail.value if hasattr(ldap_entry, 'mail') else ""
+                    groups = ldap_entry.memberOf.values if hasattr(ldap_entry, 'memberOf') else []
+
+                    # Get or create the Django user
+                    user, created = User.objects.get_or_create(username=username)
+                    if created:
+                        user.set_unusable_password()
+                        user.first_name = first_name
+                        user.last_name = last_name
+                        user.email = email
+
+                    # Create groups and assign the user to them
+                    for group_dn in groups:
+                        group_name = group_dn.split(',')[0][3:]  # Extract group name from DN (e.g., "CN=admin" -> "admin")
+                        group, _ = Group.objects.get_or_create(name=group_name)  # Ensure the group exists
+                        if not user.groups.filter(name=group_name).exists():
+                            user.groups.add(group)
+
+                        # Check if the user is part of the 'admin' group to set is_staff
+                        if group_name.lower() == 'admin':
+                            user.is_staff = True
+
+                    user.save()
+
+                    logger.info(f"User {username} authenticated and {'created' if created else 'updated'} in Django. Assigned to groups {', '.join([g.split(',')[0][3:] for g in groups])}.")
+                    return user
+        except Exception as e:
+            logger.warning(f"LDAP authentication failed for user {username}: {e}")
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None
+```
+
+### Backend without groups
+
+<details>
+
+<summary>example with just user creation without any groups</summary>
+
+ ```python title="docker-compose.env"
 import logging
 from django.contrib.auth.models import User
 from django.contrib.auth.backends import BaseBackend
@@ -70,11 +154,14 @@ class LDAPBackend(BaseBackend):
         except User.DoesNotExist:
             return None
 ```
+</details>
 
 ## Key Features of the Backend
 
 - **Centralized Authentication**: User credentials are verified against the LDAP server.
 - **Dynamic User Management**: Users are automatically created or updated in the local Django database upon successful authentication.
+- **Dynamic Group Management**: Groups are automatically generated from those that the user belongs to.
+- **Admin**: When a user is in the admin group, he also gets a staff member status.
 - **Logging**: Authentication attempts are logged for debugging and auditing purposes.
 
 ## Adding LDAP Support to Paperless-ngx
