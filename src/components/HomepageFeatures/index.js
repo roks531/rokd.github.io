@@ -6,6 +6,8 @@ import recentPosts from '@site/.docusaurus/recent-posts.json'; // Import recent 
 import ParticlesBackground from './ParticlesBackground';
 import { motion, AnimatePresence } from 'framer-motion'; // For animations
 import Typed from 'typed.js'; // Import Typed.js
+import Head from '@docusaurus/Head'; // Import Head component for SEO
+
 
 // Image Carousel
 function ImageCarousel() {
@@ -212,7 +214,31 @@ export default function HomepageFeatures() {
     return () => typed.destroy();
   }, []);
 
+  
   return (
+    <>
+    <Head>
+      <title>Rok Damjanić - Tech Blog and Adventures</title>
+      <meta name="description" content="Welcome to the personal blog of Rok Damjanić, where I share insights on technology, projects, hiking adventures, and more." />
+      <meta name="keywords" content="Rok Damjanić, tech blog, software developer, hiking, outdoor adventures, developer blog, programming insights" />
+      <meta property="og:title" content="Rok Damjanić - Tech Blog and Adventures" />
+      <meta property="og:description" content="Join Rok Damjanić as he shares his experiences in technology, outdoor adventures, and everything in between." />
+      <meta property="og:image" content="https://example.com/your-image.jpg" />
+      <meta property="og:url" content="https://your-website.com" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:creator" content="@your-twitter-handle" />
+      <script type="application/ld+json">
+        {JSON.stringify({
+          '@context': 'https://schema.org/',
+          '@type': 'Person',
+          name: 'Rok Damjanić',
+          url: 'https://your-website.com',
+          image: 'https://example.com/your-image.jpg',
+          description: 'Personal blog of Rok Damjanić, tech enthusiast, software developer, and hiker.',
+        })}
+      </script>
+    </Head>
+
     <section className={styles.features}>
       {/* Include the ParticlesBackground component */}
       <ParticlesBackground />
@@ -254,6 +280,7 @@ export default function HomepageFeatures() {
         </div>
       </div>
     </section>
+  </>
   );
 }
 

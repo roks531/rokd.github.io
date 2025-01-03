@@ -84,6 +84,13 @@ const config = {
           trackingID: 'G-W32HFNBE85',
           anonymizeIP: true,
         },
+        sitemap: {
+          lastmod: 'date', // Optionally add lastmod if you want to track when a page was last modified.
+          changefreq: 'weekly', // Set the crawl frequency for all pages 
+          priority: 0.5, // Default priority for pages
+          ignorePatterns: ['/tags/**'], // Exclude pages with paths matching these patterns
+          filename: 'sitemap.xml', // Output file name
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -171,40 +178,6 @@ const config = {
           }),
         },
       ],
-      sitemap: {
-        lastmod: 'date', // Optionally add lastmod if you want to track when a page was last modified.
-        changefreq: 'weekly', // Set the crawl frequency for all pages by default
-        priority: 0.5, // Default priority for pages
-        ignorePatterns: ['/tags/**'], // Exclude pages with paths matching these patterns
-        filename: 'sitemap.xml', // Output file name
-      
-        // Custom function to adjust priorities based on the route
-        createSitemapItems: async (params) => {
-          const {defaultCreateSitemapItems, ...rest} = params;
-      
-          // Create the default sitemap items
-          const items = await defaultCreateSitemapItems(rest);
-      
-          // Modify priorities based on the route
-          return items.map((item) => {
-            if (item.url === '/') {
-              // Set highest priority for homepage
-              item.priority = 1.0;
-            } else if (item.url.startsWith('/blog')) {
-              // Set priority for blog-related pages (e.g., blog posts)
-              item.priority = 0.8;
-            } else if (item.url.startsWith('/docs')) {
-              // Set priority for docs pages
-              item.priority = 0.7;
-            } else if (item.url.startsWith('/about')) {
-              // Set priority for About page
-              item.priority = 0.6;
-            }
-            // Add additional priority logic for other routes if necessary
-            return item;
-          });
-        },
-      },
       navbar: {
         title: "Home",
         logo: {
