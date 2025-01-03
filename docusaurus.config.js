@@ -37,7 +37,7 @@ const config = {
   // may want to replace "en" with "zh-Hans".
   i18n: {
     defaultLocale: 'en',
-    locales: ['en', 'sl'],
+    locales: ['en'],
     localeConfigs: {
       en: {
         label: 'English'
@@ -81,7 +81,7 @@ const config = {
         //   //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
         // },
         gtag: {
-          trackingID: 'G-W32HFNBE85',
+          trackingID: 'G-W32HFNBE85', 
           anonymizeIP: true,
         },
         sitemap: {
