@@ -55,11 +55,13 @@ html[data-theme='dark'] .hero {
 
 html[data-theme='light'] .hero__title {
   color: #398300;
+  visibility: hidden;
   /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
 }
 
 html[data-theme='light'] .hero__subtitle {
   color: #045ab1;
+  visibility: hidden;
   /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
 }
 
@@ -70,10 +72,12 @@ html[data-theme='light'] .hero__subtitle {
 
 html[data-theme='dark'] .hero__title {
   color: #398300; /* Set the color */
+  visibility: hidden;
 }
 
 html[data-theme='dark'] .hero__subtitle {
   color: #045ab1;
+  visibility: hidden;
   /*background-image: url("/static/img/docusaurus-social-card.jpg");*/
 }
 

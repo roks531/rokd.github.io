@@ -10,8 +10,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 
 const config = {
-  title: " ",
-  tagline: '',
+  title: "Rok Damjanić - Tech and Adventures",
+  tagline: 'Explore my tech projects, blogs, and adventures',
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
@@ -80,6 +80,10 @@ const config = {
         //   // editUrl:
         //   //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
         // },
+        gtag: {
+          trackingID: 'G-W32HFNBE85',
+          anonymizeIP: true,
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -91,7 +95,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       // Replace with your project's social card
-      image: 'img/logo.png',
+      image: 'img/social-card.png',
       algolia: {
         // The application ID provided by Algolia
         appId: 'JV67CWDNZ4',
@@ -121,6 +125,52 @@ const config = {
   
         //... other Algolia params
       },
+      metadata: [
+        { name: 'description', content: 'The official website of Rok Damjanić. Discover my projects, insights on tech, and my outdoor adventures.' },
+        { name: 'keywords', content: 'Rok Damjanić, Damjanic, tech blog, hiking blog, projects, tech solutions' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: 'Rok Damjanić - Tech Projects and Outdoor Adventures' },
+        { name: 'twitter:description', content: 'Sharing insights on tech projects, solutions, and my passion for outdoor exploration.' },
+        { name: 'twitter:image', content: 'https://rokdamjanic.com/img/social-card.png' },
+        { property: 'og:title', content: 'Rok Damjanić - Tech and Adventures' },
+        { property: 'og:description', content: 'The official site of Rok Damjanić, featuring tech projects and outdoor exploration stories.' },
+        { property: 'og:image', content: 'https://rokdamjanic.com/img/social-card.png' },
+        { property: 'og:url', content: 'https://rokdamjanic.com' },
+        { property: 'og:type', content: 'website' },
+      ],
+  
+      headTags: [
+        {
+          tagName: 'script',
+          attributes: { type: 'application/ld+json' },
+          innerHTML: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: 'Rok Damjanić',
+            url: 'https://rokdamjanic.com',
+            sameAs: [
+              'https://www.linkedin.com/in/rok-damjanic/',
+              'https://github.com/roks531',
+            ],
+            description: 'Sharing my experiences in tech and outdoor adventures.',
+          }),
+        },
+        {
+          tagName: 'script',
+          attributes: { type: 'application/ld+json' },
+          innerHTML: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: 'Rok Damjanić Official Site',
+            url: 'https://rokdamjanic.com',
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: 'https://rokdamjanic.com/?q={search_term_string}',
+              'query-input': 'required name=search_term_string',
+            },
+          }),
+        },
+      ],
       navbar: {
         title: "Home",
         logo: {
