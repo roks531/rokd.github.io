@@ -1,0 +1,212 @@
+---
+slug: openforis-arena-mail
+title: office365 mail in openforis arena
+authors: [rok]
+tags: [openforis, arena, office365]
+image: /img/blog_img/2025-04-13-openforis-arena.png
+---
+
+## Fixing Office365 Mail in OpenForis Arena with STARTTLS
+
+The [OpenForis Arena](https://github.com/openforis/arena) platform comes with built-in email support, but the default configuration does **not** correctly support STARTTLS when using Office365 SMTP servers. This causes the entire mailing service to fail — which means **new users cannot register**, and existing admins are **unable to invite users** to join the system.
+
+This guide explains how to patch the email integration to work with Office365 using NodeMailer, configure the necessary environment variables, and deploy Arena using Docker Compose — complete with working email functionality and GitHub package authentication for building the image.
+
+Using default mailer.js component produces errors like this below, even if the config is correctly filled out.
+
+![Error screenshot 1](/img/blog_img/2025-04-13-openforis-arena-error1.png)
+
+![Error screenshot 2](/img/blog_img/2025-04-13-openforis-arena-error2.png)
+
+---
+
+## Why this matters
+
+Office365 requires STARTTLS on port 587 with the correct authentication and TLS configuration. Arena's default mail configuration isn't compatible, leading to failed email deliveries or TLS handshake errors.
+
+We’ll fix that by:
+- Modifying Arena’s `mailer.js` file
+- Enabling Office365 as a mail provider
+- Setting up appropriate environment variables
+- Building and running Arena via Docker
+
+---
+
+## Step 1: Clone the Arena Repository
+
+```bash
+git clone https://github.com/openforis/arena.git
+cd arena
+```
+
+---
+
+## Step 2: Patch the Mailer Utility
+
+Edit the file `server/utils/mailer.js` and replace its contents with the following:
+
+```js title="mailer.js"
+import * as nodemailer from 'nodemailer'
+import * as ProcessUtils from '@core/processUtils'
+import * as i18nFactory from '@core/i18n/i18nFactory'
+import * as Log from '@server/log/log'
+
+const logger = Log.getLogger('Mailer')
+
+const emailServices = {
+  office365: 'office365',
+}
+
+const emailService = ProcessUtils.ENV.emailService
+const authUser = ProcessUtils.ENV.emailAuthUser
+const authPass = ProcessUtils.ENV.emailAuthPassword
+const from = ProcessUtils.ENV.adminEmail || authUser
+
+logger.debug('Email configuration:', {
+  emailService,
+  authUser: authUser ? '[set]' : '[not set]',
+  authPass: authPass ? '[set]' : '[not set]',
+  from,
+})
+
+const transporter = nodemailer.createTransport({
+  host: 'smtp.office365.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: authUser,
+    pass: authPass,
+  },
+  requireTLS: true,
+  tls: {
+    minVersion: 'TLSv1.3',
+    ciphers: 'TLS_AES_256_GCM_SHA384',
+    rejectUnauthorized: false,
+  },
+  debug: true,
+  logger: true,
+})
+
+transporter.verify((error, success) => {
+  if (error) {
+    logger.error('❌ Transporter verification failed on startup:', error)
+  } else {
+    logger.debug('✅ Transporter verified on startup')
+  }
+})
+
+const sendEmailMSOffice365 = async ({ to, subject, html, text = null }) => {
+  try {
+    await transporter.verify()
+    logger.debug('✅ Email transporter connection verified before send')
+
+    const info = await transporter.sendMail({
+      from,
+      to,
+      replyTo: from,
+      subject,
+      html,
+      text,
+    })
+
+    logger.debug('📩 Email sent:', info.messageId)
+    return info
+  } catch (error) {
+    logger.error('❌ Email sending error:', error)
+    throw error
+  }
+}
+
+export const sendEmail = async ({ to, msgKey, msgParams = {}, i18n: i18nParam = null, lang = 'en' }) => {
+  if (!authUser || !authPass) {
+    const error = new Error('Email auth credentials not configured in environment')
+    logger.error(error.message)
+    throw error
+  }
+
+  const i18n = i18nParam ? i18nParam : await i18nFactory.createI18nAsync(lang)
+
+  const subject = i18n.t(`${msgKey}.subject`, msgParams)
+  const html = i18n.t(`${msgKey}.body`, msgParams)
+
+  if (emailService === emailServices.office365) {
+    return await sendEmailMSOffice365({ to, subject, html })
+  } else {
+    throw new Error('Invalid email service specified: ' + emailService)
+  }
+}
+```
+
+---
+
+## Step 3: Get Your GitHub NPM Token
+
+To build Arena with Arena’s GitHub Packages, you need a personal access token.
+
+### How to get your token:
+
+1. Go to [GitHub > Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
+2. Click **"Generate new token (classic)"**
+3. Select the following scope:
+   - `read:packages`
+4. Generate and copy the token. It will look like:
+
+```
+ghp_ze4O1W2hfRTZ878d1Fvnndz4eZUDc
+```
+
+---
+
+## Step 4: Configure Environment Variables
+
+Create a `.env` file in the root of the Arena project:
+
+```env
+NPM_TOKEN=ghp_ze4O1W2hfRTZ878d1Fvnndz4eZUDc
+```
+
+Then modify the `arena.env` file for Arena’s runtime environment:
+
+```env
+EMAIL_SERVICE=office365
+EMAIL_AUTH_USER=your_admin_mail@mail.com (same as in arena.env)
+EMAIL_AUTH_PASSWORD=your_office365_password
+```
+
+---
+
+## Step 5: Build with Docker Compose
+
+Create a `docker-compose.yml` in the root of your project:
+
+```yaml
+services:
+  arena:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NPM_TOKEN=${NPM_TOKEN}
+    container_name: openforis-arena
+    restart: always
+    env_file:
+      - arena.env
+    network_mode: "host"
+```
+
+Then run:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+---
+
+## All Set!
+
+You now have a working OpenForis Arena deployment that can send emails through Office365 using STARTTLS — complete with logs, error handling, and secure configuration.
+
+No more failed handshakes or broken notifications. 🎉
+
+---
