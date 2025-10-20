@@ -1,0 +1,554 @@
+---
+sidebar_position: 4
+---
+
+# PostgreSQL Streaming Replication
+
+Guide for setting up PostgreSQL streaming replication with a primary-standby configuration, including optional Pgpool-II for connection pooling and automatic failover.
+
+## Overview
+
+Streaming replication provides:
+- **High Availability**: Automatic failover to standby server
+- **Load Balancing**: Distribute read queries across replicas
+- **Data Redundancy**: Real-time data replication
+- **Zero Data Loss**: With synchronous replication
+
+## Architecture
+
+```
+┌─────────────┐        Replication        ┌─────────────┐
+│   Primary   │ ─────────────────────────> │   Standby   │
+│ 192.168.1.51│                            │ 192.168.1.52│
+└─────────────┘                            └─────────────┘
+       │                                           │
+       │              ┌─────────────┐             │
+       └──────────────│  Pgpool-II  │─────────────┘
+                      │ 192.168.1.50│
+                      │  Port: 9999 │
+                      └─────────────┘
+```
+
+## Part 1: Primary Server Setup
+
+### Step 1: Configure PostgreSQL on Primary
+
+Edit the main configuration file:
+
+```bash
+sudo nano /etc/postgresql/15/main/postgresql.conf
+```
+
+Add or modify these settings:
+
+```conf
+# Network
+listen_addresses = '*'
+
+# Replication settings
+wal_level = replica
+max_wal_senders = 10
+wal_keep_size = 256
+
+# Standby settings
+hot_standby = on
+wal_log_hints = on
+
+# Synchronous replication (for zero data loss)
+synchronous_commit = remote_apply
+synchronous_standby_names = '*'
+```
+
+#### Configuration Explanation
+
+- `wal_level = replica`: Enable WAL (Write-Ahead Log) for replication
+- `max_wal_senders = 10`: Maximum number of standby servers (adjust as needed)
+- `wal_keep_size = 256`: Keep 256MB of WAL files for standby servers
+- `hot_standby = on`: Allow read queries on standby servers
+- `wal_log_hints = on`: Required for pg_rewind
+- `synchronous_commit = remote_apply`: Wait for standby to apply changes
+- `synchronous_standby_names = '*'`: All standbys are synchronous
+
+:::info Synchronous vs Asynchronous
+**Synchronous** (`remote_apply`): Zero data loss, but slower commits
+**Asynchronous**: Faster, but potential data loss if primary fails
+:::
+
+### Step 2: Configure Authentication
+
+Edit the host-based authentication file:
+
+```bash
+sudo nano /etc/postgresql/15/main/pg_hba.conf
+```
+
+Add replication connection rules:
+
+```conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+host    replication     rep_user        192.168.1.52/32         scram-sha-256
+host    replication     rep_user        192.168.1.0/24          scram-sha-256
+```
+
+Replace `192.168.1.52` with your standby server IP address.
+
+### Step 3: Create Replication User
+
+Connect to PostgreSQL and create the replication user:
+
+```bash
+psql
+```
+
+```sql
+-- Create replication user
+CREATE USER rep_user REPLICATION LOGIN ENCRYPTED PASSWORD 'YourSecurePassword';
+
+-- Create monitoring user (optional, for Pgpool-II)
+CREATE USER monitor WITH ENCRYPTED PASSWORD 'MonitorPassword';
+
+-- Create monitoring database (optional)
+CREATE DATABASE monitor;
+
+-- Grant necessary privileges
+GRANT pg_monitor TO monitor;
+```
+
+### Step 4: Restart Primary Server
+
+Apply the configuration changes:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+Verify it's running:
+
+```bash
+sudo systemctl status postgresql
+```
+
+## Part 2: Standby Server Setup
+
+### Step 1: Configure PostgreSQL on Standby
+
+Edit the configuration file:
+
+```bash
+sudo nano /etc/postgresql/15/main/postgresql.conf
+```
+
+Add these settings:
+
+```conf
+# Network
+listen_addresses = '*'
+
+# Primary connection info
+primary_conninfo = 'host=192.168.1.51 port=5432 user=rep_user password=YourSecurePassword'
+
+# Standby settings
+hot_standby = on
+```
+
+:::tip Primary Connection String
+The `primary_conninfo` tells the standby where to connect. Adjust the host, port, and credentials to match your primary server.
+:::
+
+### Step 2: Backup Existing Data
+
+Stop PostgreSQL and backup the existing data directory:
+
+```bash
+sudo systemctl stop postgresql
+sudo mv /var/lib/postgresql/15/main /var/lib/postgresql/15/main-backup
+```
+
+### Step 3: Initialize Standby from Primary
+
+Use `pg_basebackup` to copy data from the primary:
+
+```bash
+sudo -u postgres pg_basebackup \
+  -h 192.168.1.51 \
+  -p 5432 \
+  -U rep_user \
+  -Fp \
+  -Xs \
+  -P \
+  -R \
+  -D /var/lib/postgresql/15/main
+```
+
+#### Options Explanation
+
+- `-h`: Primary server hostname/IP
+- `-p`: Primary server port
+- `-U`: Replication user
+- `-Fp`: Plain format (regular directory)
+- `-Xs`: Stream WAL files during backup
+- `-P`: Show progress
+- `-R`: Create standby.signal and write connection info
+- `-D`: Target data directory
+
+You'll be prompted for the replication user's password.
+
+### Step 4: Set Permissions
+
+Fix permissions on the new data directory:
+
+```bash
+sudo chmod 0700 /var/lib/postgresql/15/main
+sudo chown -R postgres:postgres /var/lib/postgresql/15/main
+```
+
+### Step 5: Start Standby Server
+
+Start PostgreSQL on the standby:
+
+```bash
+sudo systemctl start postgresql
+sudo systemctl status postgresql
+```
+
+## Part 3: Verify Replication
+
+### On Primary Server
+
+Check replication status:
+
+```bash
+psql -x -c "SELECT * FROM pg_stat_replication;"
+```
+
+Expected output:
+```
+-[ RECORD 1 ]----+------------------------------
+pid              | 12345
+usesysid         | 16384
+usename          | rep_user
+application_name | walreceiver
+client_addr      | 192.168.1.52
+client_hostname  | 
+client_port      | 54321
+backend_start    | 2025-10-20 10:00:00.000000+00
+backend_xmin     | 
+state            | streaming
+sent_lsn         | 0/3000000
+write_lsn        | 0/3000000
+flush_lsn        | 0/3000000
+replay_lsn       | 0/3000000
+write_lag        | 
+flush_lag        | 
+replay_lag       | 
+sync_priority    | 1
+sync_state       | sync
+```
+
+Key fields:
+- `state`: Should be `streaming`
+- `sync_state`: Should be `sync` (synchronous) or `async` (asynchronous)
+
+### On Standby Server
+
+Check if server is in recovery mode:
+
+```bash
+psql -c "SELECT pg_is_in_recovery();"
+```
+
+Should return `t` (true).
+
+### Test Replication
+
+On primary, create a test table:
+
+```sql
+CREATE TABLE replication_test (id INT, data TEXT);
+INSERT INTO replication_test VALUES (1, 'Test data');
+```
+
+On standby, verify the data:
+
+```sql
+SELECT * FROM replication_test;
+```
+
+You should see the same data (standby is read-only).
+
+## Part 4: Pgpool-II Setup (Optional)
+
+Pgpool-II provides connection pooling, load balancing, and automatic failover.
+
+### Install Pgpool-II
+
+On a third server (or on primary/standby):
+
+```bash
+# Add PostgreSQL repository
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+# Import repository key
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+
+# Move key to proper location
+sudo mv /etc/apt/trusted.gpg /etc/apt/trusted.gpg.d/psql.gpg
+
+# Update and install
+sudo apt-get update
+sudo apt-get install -y pgpool2 libpgpool2 postgresql-15-pgpool2
+```
+
+### Configure Pgpool-II
+
+Edit the Pgpool configuration:
+
+```bash
+sudo nano /etc/pgpool2/pgpool.conf
+```
+
+Key configuration settings:
+
+```conf
+# Connection settings
+listen_addresses = '*'
+port = 9999
+socket_dir = '/var/run/postgresql'
+
+# Backend 0 (Primary)
+backend_hostname0 = '192.168.1.51'
+backend_port0 = 5432
+backend_weight0 = 1
+backend_flag0 = 'ALLOW_TO_FAILOVER'
+
+# Backend 1 (Standby)
+backend_hostname1 = '192.168.1.52'
+backend_port1 = 5432
+backend_weight1 = 1
+backend_flag1 = 'ALLOW_TO_FAILOVER'
+
+# Failover settings
+failover_on_backend_error = on
+auto_failback = on
+auto_failback_interval = 1min
+
+# Load balancing
+load_balance_mode = on
+```
+
+### Start Pgpool-II
+
+```bash
+sudo systemctl enable pgpool2
+sudo systemctl start pgpool2
+sudo systemctl status pgpool2
+```
+
+### Test Pgpool-II
+
+Check pool nodes:
+
+```bash
+psql -h 192.168.1.50 -U postgres -p 9999 postgres -c "SHOW pool_nodes;"
+```
+
+Expected output:
+```
+ node_id | hostname      | port | status | lb_weight | role    | select_cnt
+---------+---------------+------+--------+-----------+---------+------------
+ 0       | 192.168.1.51 | 5432 | up     | 0.500000  | primary | 0
+ 1       | 192.168.1.52 | 5432 | up     | 0.500000  | standby | 0
+```
+
+## Managing Pgpool-II
+
+### Manually Set Node Status
+
+If a node shows as down but is actually up:
+
+```bash
+# Edit status file
+sudo nano /var/log/postgresql/pgpool_status
+```
+
+Change `down` to `up` for the affected node.
+
+### Debug Mode
+
+Run Pgpool in debug mode:
+
+```bash
+# Don't detach (stay in foreground)
+pgpool -D
+
+# With logging
+pgpool -n &
+```
+
+### View Logs
+
+```bash
+sudo tail -f /var/log/postgresql/pgpool.log
+```
+
+## Failover Testing
+
+### Simulate Primary Failure
+
+On primary server:
+
+```bash
+sudo systemctl stop postgresql
+```
+
+Pgpool should automatically promote the standby to primary.
+
+### Check New Primary
+
+```bash
+psql -h 192.168.1.50 -U postgres -p 9999 -c "SHOW pool_nodes;"
+```
+
+The former standby should now show as `primary`.
+
+### Manual Failover
+
+Promote standby to primary manually:
+
+```bash
+# On standby server
+sudo -u postgres /usr/lib/postgresql/15/bin/pg_ctl promote -D /var/lib/postgresql/15/main
+```
+
+## Monitoring
+
+### Check Replication Lag
+
+On primary:
+
+```sql
+SELECT 
+  client_addr,
+  state,
+  sent_lsn,
+  write_lsn,
+  flush_lsn,
+  replay_lsn,
+  write_lag,
+  flush_lag,
+  replay_lag
+FROM pg_stat_replication;
+```
+
+### Monitor WAL Files
+
+```sql
+SELECT pg_current_wal_lsn();  -- On primary
+SELECT pg_last_wal_receive_lsn();  -- On standby
+SELECT pg_last_wal_replay_lsn();  -- On standby
+```
+
+### Calculate Replication Delay
+
+```sql
+SELECT 
+  EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) AS replication_delay_seconds;
+```
+
+## Troubleshooting
+
+### Replication Not Starting
+
+Check logs:
+```bash
+sudo tail -f /var/log/postgresql/postgresql-15-main.log
+```
+
+Common issues:
+- Incorrect `pg_hba.conf` entry
+- Wrong password in `primary_conninfo`
+- Network connectivity issues
+- Firewall blocking port 5432
+
+### Standby Falls Behind
+
+Increase `wal_keep_size`:
+```conf
+wal_keep_size = 1024  # Keep more WAL files
+```
+
+Or use replication slots:
+```sql
+-- On primary
+SELECT * FROM pg_create_physical_replication_slot('standby_slot');
+```
+
+```conf
+# On standby in primary_conninfo
+primary_slot_name = 'standby_slot'
+```
+
+### Connection Refused
+
+Check PostgreSQL is listening:
+```bash
+sudo ss -tlnp | grep postgres
+```
+
+Check firewall:
+```bash
+sudo firewall-cmd --add-service=postgresql --permanent
+sudo firewall-cmd --reload
+```
+
+## Best Practices
+
+1. **Use Synchronous Replication** for critical data (zero data loss)
+2. **Monitor Replication Lag** regularly
+3. **Test Failover** procedures in development
+4. **Regular Backups** - replication is not a backup!
+5. **Monitor Disk Space** - WAL files can accumulate
+6. **Use SSL** for replication connections in production
+7. **Document Failover Procedures** for your team
+8. **Set Up Alerts** for replication failures
+
+## Security Enhancements
+
+### Use SSL for Replication
+
+On primary, enable SSL:
+
+```conf
+ssl = on
+ssl_cert_file = '/etc/postgresql/15/main/server.crt'
+ssl_key_file = '/etc/postgresql/15/main/server.key'
+```
+
+Update `primary_conninfo` on standby:
+
+```conf
+primary_conninfo = 'host=192.168.1.51 port=5432 user=rep_user password=YourPassword sslmode=require'
+```
+
+### Use Replication Slots
+
+Prevents primary from removing WAL files needed by standby:
+
+```sql
+-- On primary
+SELECT * FROM pg_create_physical_replication_slot('standby1');
+```
+
+Update standby configuration:
+
+```conf
+primary_slot_name = 'standby1'
+```
+
+## Additional Resources
+
+- [PostgreSQL Replication Documentation](https://www.postgresql.org/docs/current/high-availability.html)
+- [Pgpool-II Documentation](https://www.pgpool.net/docs/latest/en/html/)
+- [pg_basebackup Reference](https://www.postgresql.org/docs/current/app-pgbasebackup.html)
+- [Monitoring Replication](https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW)
+

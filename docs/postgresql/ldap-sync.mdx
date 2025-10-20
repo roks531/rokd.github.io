@@ -1,0 +1,421 @@
+---
+sidebar_position: 2
+---
+
+# PostgreSQL LDAP User Sync
+
+Automatically synchronize users and groups from LDAP/Active Directory to PostgreSQL using `pg-ldap-sync`. This eliminates manual user management and keeps database access aligned with your directory service.
+
+## What is pg-ldap-sync?
+
+`pg-ldap-sync` is a Ruby tool that:
+- Synchronizes LDAP/AD users and groups to PostgreSQL roles
+- Maintains group memberships automatically
+- Can run as a scheduled task for continuous sync
+- Supports filtering and custom role options
+
+## Prerequisites
+
+- PostgreSQL database with superuser access
+- LDAP/Active Directory server access
+- Ruby installed on the system
+- Network connectivity between PostgreSQL and LDAP server
+
+## Step 1: Create Base Roles in PostgreSQL
+
+Create two parent roles that will contain all synced users and groups:
+
+```sql
+CREATE ROLE ldap_users;
+CREATE ROLE ldap_groups;
+```
+
+These roles act as containers. All synced LDAP users will be members of `ldap_users`, and all synced groups will be members of `ldap_groups`.
+
+:::tip Grant Permissions
+After sync, grant database permissions to these parent roles:
+```sql
+GRANT CONNECT ON DATABASE mydb TO ldap_users;
+GRANT USAGE ON SCHEMA public TO ldap_users;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO ldap_users;
+```
+:::
+
+## Step 2: Install pg-ldap-sync
+
+### Standard Installation (Direct Internet Access)
+
+```bash
+gem install pg-ldap-sync
+```
+
+### RHEL/AlmaLinux/Rocky Linux
+
+Install dependencies:
+
+```bash
+sudo dnf install ruby ruby-devel postgresql16-devel
+```
+
+Install with PostgreSQL config path:
+
+```bash
+gem install pg-ldap-sync -- --with-pg-config=/usr/pgsql-16/bin/pg_config
+```
+
+Replace `16` with your PostgreSQL version (e.g., `15`, `17`).
+
+### Behind Corporate Proxy
+
+If behind a proxy, specify it during installation:
+
+```bash
+gem install --http-proxy http://proxy.example.com:80 pg-ldap-sync -- --with-pg_config=/usr/pgsql-16/bin/pg_config
+```
+
+### Add Ruby Gems to PATH
+
+After installation, add the gem binary path to your PATH:
+
+```bash
+vi ~/.bashrc
+```
+
+Add this line (adjust Ruby version as needed):
+
+```bash
+export PATH="$HOME/.local/share/gem/ruby/3.0.0/bin:$PATH"
+```
+
+Apply changes:
+
+```bash
+source ~/.bashrc
+```
+
+Verify installation:
+
+```bash
+pg_ldap_sync --version
+```
+
+## Step 3: Create Configuration File
+
+Create a YAML configuration file (e.g., `pgldapsync.yml`):
+
+```yaml
+# Connection parameters to LDAP server
+ldap_connection:
+  host: ldap.example.com
+  port: 389
+  auth:
+    method: :simple
+    username: cn=readonly,cn=Users,dc=example,dc=com
+    password: YourLDAPPassword
+
+# Search parameters for LDAP users
+ldap_users:
+  base: dc=example,dc=com
+  filter: (&(objectClass=User)(objectCategory=Person))
+  name_attribute: sAMAccountName
+  lowercase_name: true
+  bothcase_name: false
+
+# Search parameters for LDAP groups
+ldap_groups:
+  base: dc=example,dc=com
+  filter: (objectClass=group)
+  name_attribute: cn
+  lowercase_name: false
+  member_attribute: member
+
+# Connection parameters to PostgreSQL server
+pg_connection:
+  host: localhost
+  port: 5432
+  dbname: postgres
+  user: postgres
+  password: YourPostgresPassword
+
+# PostgreSQL user filter and options
+pg_users:
+  filter: oid IN (SELECT pam.member FROM pg_auth_members pam JOIN pg_roles pr ON pr.oid=pam.roleid WHERE pr.rolname='ldap_users')
+  create_options: LOGIN IN ROLE ldap_users
+
+# PostgreSQL group filter and options
+pg_groups:
+  filter: oid IN (SELECT pam.member FROM pg_auth_members pam JOIN pg_roles pr ON pr.oid=pam.roleid WHERE pr.rolname='ldap_groups')
+  create_options: NOLOGIN IN ROLE ldap_groups
+```
+
+### Configuration Explanation
+
+**LDAP Connection:**
+- `host`: LDAP/AD server hostname or IP
+- `port`: 389 (LDAP) or 636 (LDAPS)
+- `auth.username`: Service account with read access to users/groups
+- `auth.password`: Service account password
+
+**LDAP Users:**
+- `base`: Starting point for user search (DN)
+- `filter`: LDAP filter to match users (Active Directory example shown)
+- `name_attribute`: LDAP attribute to use as PostgreSQL role name (usually `sAMAccountName` or `uid`)
+- `lowercase_name`: Convert usernames to lowercase
+- `bothcase_name`: Create both original and lowercase versions
+
+**LDAP Groups:**
+- `base`: Starting point for group search
+- `filter`: LDAP filter to match groups
+- `name_attribute`: Attribute to use as role name (usually `cn`)
+- `member_attribute`: Attribute containing group members (usually `member` or `memberUid`)
+
+**PostgreSQL Connection:**
+- Standard PostgreSQL connection parameters
+- User must have `CREATEROLE` privilege
+
+**PostgreSQL Filters:**
+- Define which existing PostgreSQL roles belong to the sync scope
+- Only roles matching the filter will be managed by sync
+
+## Step 4: Test the Configuration
+
+Run in test mode (dry-run) to see what would happen:
+
+```bash
+pg_ldap_sync -c /path/to/pgldapsync.yml -vv -t
+```
+
+Flags:
+- `-c`: Configuration file path
+- `-vv`: Very verbose output (shows all operations)
+- `-t`: Test mode (no changes made)
+
+Review the output carefully:
+- Check if correct users/groups are found
+- Verify no unwanted users/groups are being deleted
+- Ensure role options look correct
+
+## Step 5: Run the Sync
+
+If test mode looks good, run the actual sync:
+
+```bash
+pg_ldap_sync -c /path/to/pgldapsync.yml -vv
+```
+
+This will:
+1. Create missing PostgreSQL roles for LDAP users
+2. Create missing PostgreSQL roles for LDAP groups
+3. Update group memberships
+4. Remove roles that no longer exist in LDAP (if configured)
+
+## Verification
+
+### Check Synced Users
+
+```sql
+-- List all synced users
+SELECT rolname FROM pg_roles 
+WHERE oid IN (
+  SELECT member FROM pg_auth_members 
+  WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'ldap_users')
+) ORDER BY rolname;
+```
+
+### Check Synced Groups
+
+```sql
+-- List all synced groups
+SELECT rolname FROM pg_roles 
+WHERE oid IN (
+  SELECT member FROM pg_auth_members 
+  WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'ldap_groups')
+) ORDER BY rolname;
+```
+
+### Check Group Memberships
+
+```sql
+-- Show users and their group memberships
+SELECT 
+  u.rolname AS username,
+  g.rolname AS groupname
+FROM pg_roles u
+JOIN pg_auth_members m ON u.oid = m.member
+JOIN pg_roles g ON g.oid = m.roleid
+WHERE u.oid IN (
+  SELECT member FROM pg_auth_members 
+  WHERE roleid = (SELECT oid FROM pg_roles WHERE rolname = 'ldap_users')
+)
+ORDER BY u.rolname, g.rolname;
+```
+
+## Automation with Cron
+
+Set up automatic sync every hour:
+
+```bash
+crontab -e
+```
+
+Add:
+
+```bash
+0 * * * * /usr/local/bin/pg_ldap_sync -c /etc/pgldapsync.yml >> /var/log/pg-ldap-sync.log 2>&1
+```
+
+Or use systemd timer for better logging.
+
+## Advanced Configuration
+
+### Use LDAPS (Secure LDAP)
+
+```yaml
+ldap_connection:
+  host: ldap.example.com
+  port: 636
+  encryption: :simple_tls
+  auth:
+    method: :simple
+    username: cn=readonly,dc=example,dc=com
+    password: YourPassword
+```
+
+### Filter Specific OUs
+
+Only sync users from specific organizational units:
+
+```yaml
+ldap_users:
+  base: ou=Employees,dc=example,dc=com
+  filter: (&(objectClass=User)(objectCategory=Person))
+```
+
+### Exclude Certain Groups
+
+```yaml
+ldap_groups:
+  filter: (&(objectClass=group)(!(cn=Domain Users)))
+```
+
+### Grant Additional Privileges
+
+Modify `create_options` to add more role attributes:
+
+```yaml
+pg_users:
+  create_options: LOGIN IN ROLE ldap_users CREATEROLE
+```
+
+### Disable User Deletion
+
+Prevent removal of users that no longer exist in LDAP:
+
+```yaml
+pg_users:
+  disable_delete: true
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**LDAP Connection Failed:**
+```bash
+# Test LDAP connection
+ldapsearch -x -H ldap://ldap.example.com:389 -D "cn=readonly,dc=example,dc=com" -w password -b "dc=example,dc=com"
+```
+
+**PostgreSQL Connection Failed:**
+```bash
+# Test PostgreSQL connection
+psql -h localhost -p 5432 -U postgres -d postgres
+```
+
+### No Users Found
+
+Check your LDAP filter:
+```bash
+ldapsearch -x -H ldap://ldap.example.com -D "cn=readonly,dc=example,dc=com" -w password -b "dc=example,dc=com" "(&(objectClass=User)(objectCategory=Person))"
+```
+
+### Permission Denied
+
+Ensure PostgreSQL user has `CREATEROLE`:
+```sql
+ALTER ROLE postgres CREATEROLE;
+```
+
+### Ruby Gem Path Issues
+
+Check gem installation path:
+```bash
+gem environment
+```
+
+Add to PATH if needed:
+```bash
+export PATH="$(ruby -e 'puts Gem.user_dir')/bin:$PATH"
+```
+
+## Security Best Practices
+
+1. **Use Read-Only LDAP Account**
+   - Create a dedicated service account
+   - Grant only read permissions
+
+2. **Secure Configuration File**
+   ```bash
+   chmod 600 /etc/pgldapsync.yml
+   chown postgres:postgres /etc/pgldapsync.yml
+   ```
+
+3. **Use LDAPS**
+   - Always use encrypted LDAP connections in production
+
+4. **Limit PostgreSQL Permissions**
+   - Sync user only needs `CREATEROLE` privilege
+   - Don't use superuser for sync
+
+5. **Monitor Sync Logs**
+   - Review sync logs regularly
+   - Alert on errors or unexpected changes
+
+6. **Test Before Production**
+   - Always test configuration changes in development
+   - Use `-t` flag to preview changes
+
+## Common LDAP Filters
+
+### Active Directory
+
+Users only:
+```yaml
+filter: (&(objectClass=User)(objectCategory=Person)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))
+```
+
+Specific group members:
+```yaml
+filter: (&(objectClass=User)(memberOf=cn=DatabaseUsers,ou=Groups,dc=example,dc=com))
+```
+
+### OpenLDAP
+
+Users with posixAccount:
+```yaml
+filter: (&(objectClass=posixAccount)(uid=*))
+```
+
+Groups with posixGroup:
+```yaml
+filter: (objectClass=posixGroup)
+member_attribute: memberUid
+```
+
+## Additional Resources
+
+- [pg-ldap-sync GitHub Repository](https://github.com/larskanis/pg-ldap-sync)
+- [PostgreSQL Roles Documentation](https://www.postgresql.org/docs/current/user-manag.html)
+- [LDAP Search Filters Guide](https://ldap.com/ldap-filters/)
+- [Active Directory LDAP Syntax](https://docs.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax)
+

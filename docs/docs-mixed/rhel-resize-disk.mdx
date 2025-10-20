@@ -1,0 +1,385 @@
+---
+sidebar_position: 3
+---
+
+# Resizing RHEL/AlmaLinux LVM Disk in Proxmox
+
+Guide for expanding disk space on RHEL-based systems (RHEL, CentOS, AlmaLinux, Rocky Linux) running in Proxmox VMs after increasing the virtual disk size.
+
+## Overview
+
+After expanding a virtual disk in Proxmox, the guest operating system needs to be told to use the additional space. This guide covers the complete process for LVM-based systems.
+
+## Step 1: Verify New Disk Size
+
+After expanding the disk in Proxmox, check if the system recognizes the new size:
+
+```bash
+dmesg | grep sda
+```
+
+This shows kernel messages about the disk device and its detected size.
+
+## Step 2: Check Current Partition Layout
+
+View the current partition structure:
+
+```bash
+fdisk -l /dev/sda | grep ^/dev
+```
+
+This displays all partitions on the disk with their current sizes.
+
+## Step 3: Resize the LVM Partition
+
+Use `parted` to expand the partition (usually partition 2 on LVM systems):
+
+```bash
+parted /dev/sda
+```
+
+In the parted prompt:
+
+```bash
+print              # View current partition table
+resizepart 2 100%  # Resize partition 2 to use 100% of disk
+quit               # Exit parted
+```
+
+:::info Partition Numbers
+LVM typically uses partition 2 (`/dev/sda2`). Use `print` to confirm which partition number contains your LVM.
+:::
+
+## Step 4: Resize the Physical Volume
+
+Expand the LVM physical volume to use the newly resized partition:
+
+```bash
+pvresize /dev/sda2
+```
+
+This tells LVM that the physical volume now has more space available.
+
+## Step 5: Check Logical Volumes
+
+View all logical volumes and their current sizes:
+
+```bash
+lvdisplay
+```
+
+Take note of:
+- Volume group name (e.g., `almalinux`, `rhel`, `cl`)
+- Logical volume name (e.g., `root`, `home`)
+- Current size
+
+## Step 6: Resize Logical Volumes
+
+### Option A: Add Specific Amount (GB)
+
+Add a fixed amount of space:
+
+```bash
+lvresize --size +20G --resizefs /dev/{volume_group_name}/root
+```
+
+Example:
+```bash
+lvresize --size +20G --resizefs /dev/almalinux/root
+```
+
+### Option B: Use All Available Space
+
+Expand to use all free space in the volume group:
+
+```bash
+lvresize --extents +100%FREE --resizefs /dev/{volume_group_name}/home
+```
+
+Example:
+```bash
+lvresize --extents +100%FREE --resizefs /dev/almalinux/home
+```
+
+:::tip --resizefs Flag
+The `--resizefs` flag automatically resizes the filesystem after expanding the logical volume. Without it, you'd need to run `resize2fs` (ext4) or `xfs_growfs` (xfs) manually.
+:::
+
+## Verification
+
+### Check Disk Space
+
+Verify the new space is available:
+
+```bash
+df -h
+```
+
+### Check LVM Status
+
+```bash
+# Physical volumes
+pvdisplay
+
+# Volume groups
+vgdisplay
+
+# Logical volumes
+lvdisplay
+```
+
+## Complete Example Workflow
+
+Here's a complete example expanding a 50GB disk to 100GB:
+
+```bash
+# 1. Check new disk size
+dmesg | grep sda
+
+# 2. View current layout
+fdisk -l /dev/sda | grep ^/dev
+
+# 3. Resize partition
+parted /dev/sda
+print
+resizepart 2 100%
+quit
+
+# 4. Resize physical volume
+pvresize /dev/sda2
+
+# 5. Check logical volumes
+lvdisplay
+
+# 6. Expand root to use all free space
+lvresize --extents +100%FREE --resizefs /dev/almalinux/root
+
+# 7. Verify
+df -h
+```
+
+## Troubleshooting
+
+### Partition Not Resizing
+
+If `resizepart` fails:
+
+```bash
+# Try using fdisk instead
+fdisk /dev/sda
+# Delete and recreate the partition with same start sector but larger size
+# WARNING: Note the exact start sector before deleting!
+```
+
+### Filesystem Not Growing
+
+If `--resizefs` fails or you didn't use it:
+
+**For ext4:**
+```bash
+resize2fs /dev/almalinux/root
+```
+
+**For XFS:**
+```bash
+xfs_growfs /dev/almalinux/root
+```
+
+### No Free Space in Volume Group
+
+Check volume group:
+```bash
+vgdisplay
+```
+
+If "Free PE" shows 0, the physical volume wasn't resized properly. Rerun:
+```bash
+pvresize /dev/sda2
+```
+
+### Disk Not Recognized
+
+If the VM doesn't see the new disk size:
+
+1. Rescan SCSI bus (without reboot):
+```bash
+echo 1 > /sys/class/scsi_device/0:0:0:0/device/rescan
+```
+
+2. Or reboot the VM (safest option)
+
+## Multiple Logical Volumes
+
+If you have multiple LVs (e.g., `/root` and `/home`), decide which one gets the extra space:
+
+```bash
+# Give 30GB to root
+lvresize --size +30G --resizefs /dev/almalinux/root
+
+# Give remaining to home
+lvresize --extents +100%FREE --resizefs /dev/almalinux/home
+```
+
+## Best Practices
+
+1. **Backup First**: Always backup important data before resizing
+2. **Check Filesystem Type**: Use appropriate resize command for your filesystem
+3. **Plan Allocation**: Decide which logical volume gets the extra space
+4. **Test in Development**: Practice on a test VM first
+5. **Monitor Space**: Use `df -h` regularly to monitor disk usage
+
+## Alternative: Extending in Proxmox GUI
+
+1. Shutdown the VM (or use hot-plug if supported)
+2. Go to VM → Hardware → Hard Disk
+3. Click "Resize disk"
+4. Enter additional size
+5. Start VM and follow steps above
+
+## Common Volume Group Names
+
+- **RHEL**: `rhel` or `cl` (CentOS Linux)
+- **AlmaLinux**: `almalinux`
+- **Rocky Linux**: `rocky` or `rl`
+- **CentOS Stream**: `cs`
+
+Check with `vgdisplay` to confirm your exact name.
+
+## Removing Unnecessary Logical Volume
+
+Sometimes you may want to consolidate space by removing a separate logical volume (like `/home`) and merging it into root. This is useful when you don't need separate partitions.
+
+:::danger Data Loss Warning
+This process will **DELETE ALL DATA** on the logical volume being removed. Make sure you have backups or migrate data first!
+:::
+
+### Step-by-Step: Removing /home and Extending /root
+
+#### 1. Backup Home Directory
+
+Create a temporary backup location and copy all home data:
+
+```bash
+sudo mkdir -p /media/home_backup
+sudo cp -a /home/. /media/home_backup/
+```
+
+The `-a` flag preserves permissions, ownership, and timestamps.
+
+#### 2. Disable Home Volume in fstab
+
+Edit the filesystem table to prevent mounting the home volume:
+
+```bash
+sudo vi /etc/fstab
+```
+
+Find the line mounting `/home` and comment it out by adding `#` at the beginning:
+
+```bash
+# /dev/mapper/almalinux-home /home xfs defaults 0 0
+```
+
+#### 3. Reboot the System
+
+Reboot to ensure the home volume is no longer mounted:
+
+```bash
+sudo reboot
+```
+
+#### 4. Remove the Logical Volume
+
+After reboot, delete the home logical volume:
+
+```bash
+sudo lvremove /dev/mapper/almalinux-home
+```
+
+Type `y` to confirm deletion.
+
+:::tip Volume Path
+The exact path may vary. Use `lvdisplay` to find your volume group and logical volume names. Common formats:
+- `/dev/mapper/almalinux-home`
+- `/dev/mapper/rhel-home`
+- `/dev/almalinux/home`
+:::
+
+#### 5. Extend Root Volume
+
+Expand the root volume to use all freed space:
+
+```bash
+sudo lvextend -l +100%FREE -r /dev/mapper/almalinux-root
+```
+
+The `-r` flag automatically resizes the filesystem.
+
+#### 6. Restore Home Data
+
+Copy the backed-up home data back to `/home`:
+
+```bash
+sudo cp -a /media/home_backup/. /home/
+```
+
+#### 7. Cleanup Backup
+
+Remove the temporary backup after verifying everything works:
+
+```bash
+sudo rm -rf /media/home_backup
+```
+
+### Verification
+
+Check that the root partition now has more space:
+
+```bash
+df -h
+```
+
+Verify home data is accessible:
+
+```bash
+ls -la /home
+```
+
+Check user permissions:
+
+```bash
+ls -la /home/yourusername
+```
+
+### When to Remove Separate Volumes
+
+**Good reasons to consolidate:**
+- Simple single-user systems
+- VMs with limited disk space
+- Easier management with one large partition
+- No need for separate quota management
+
+**Keep separate volumes when:**
+- Multi-user environments
+- Need quota enforcement
+- Want to protect system from user data filling disk
+- Following corporate policies
+
+### Alternative: Just Shrink Home
+
+If you want to keep `/home` but give more space to root:
+
+```bash
+# Don't remove, just resize
+sudo lvresize --size 10G --resizefs /dev/almalinux/home
+
+# Give freed space to root
+sudo lvextend -l +100%FREE -r /dev/almalinux/root
+```
+
+## Additional Resources
+
+- [RHEL LVM Documentation](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/configuring_and_managing_logical_volumes/)
+- [Proxmox Resize VM Disk](https://pve.proxmox.com/wiki/Resize_disks)
+- [XFS File System Guide](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/9/html/managing_file_systems/assembly_growing-an-xfs-file-system_managing-file-systems)
+

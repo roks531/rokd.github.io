@@ -1,0 +1,356 @@
+---
+sidebar_position: 1
+---
+
+# PostgreSQL PAM Authentication
+
+Guide for configuring PAM (Pluggable Authentication Modules) authentication in PostgreSQL, including integration with LDAP for centralized user management.
+
+## What is PAM Authentication?
+
+PAM allows PostgreSQL to use the system's authentication mechanisms instead of managing passwords internally. This enables:
+- Using system users for database access
+- Integration with LDAP/Active Directory
+- Centralized authentication management
+- Support for various authentication methods
+
+## Basic PAM Setup
+
+### Step 1: Configure pg_hba.conf
+
+Edit PostgreSQL's host-based authentication file:
+
+```bash
+sudo nvim /var/lib/pgsql/data/pg_hba.conf
+```
+
+Add a PAM authentication entry:
+
+```conf
+# TYPE  DATABASE  USER  ADDRESS      METHOD          OPTIONS
+host    all       all   0.0.0.0/0    pam             pamservice=postgresql
+```
+
+:::info Connection Types
+- `local`: Unix socket connections
+- `host`: TCP/IP connections (with or without SSL)
+- `hostssl`: SSL-encrypted TCP/IP only
+- `hostnossl`: Non-SSL TCP/IP only
+:::
+
+### Step 2: Adjust Shadow File Permissions
+
+PostgreSQL needs to read the shadow file for authentication:
+
+```bash
+sudo chmod 444 /etc/shadow
+```
+
+:::warning Security Consideration
+This makes the shadow file readable by all users. While the passwords are still hashed, consider security implications in your environment. Alternative: add postgres user to shadow group.
+:::
+
+Alternative (more secure):
+
+```bash
+sudo usermod -aG shadow postgres
+sudo chmod 640 /etc/shadow
+```
+
+### Step 3: Create PAM Service File
+
+Create or edit the PAM configuration for PostgreSQL:
+
+```bash
+sudo nvim /etc/pam.d/postgresql
+```
+
+Basic configuration:
+
+```conf
+auth        required    pam_unix.so debug
+account     required    pam_permit.so
+```
+
+Explanation:
+- `auth required pam_unix.so`: Use Unix system authentication
+- `debug`: Enable detailed logging (remove in production)
+- `account required pam_permit.so`: Allow all authenticated users
+
+### Step 4: Restart PostgreSQL
+
+Apply the changes:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+### Step 5: Test Authentication
+
+Try connecting with a system user:
+
+```bash
+psql -h localhost -U systemuser -d postgres
+```
+
+The system will prompt for the user's system password.
+
+## PAM with LDAP Integration
+
+### Prerequisites
+
+Install PAM LDAP module:
+
+**Arch Linux:**
+```bash
+yay -S pam_ldap
+```
+
+**Debian/Ubuntu:**
+```bash
+sudo apt install libpam-ldap
+```
+
+**RHEL/AlmaLinux:**
+```bash
+sudo yum install pam_ldap
+```
+
+This installs:
+- PAM module: `/usr/lib/security/pam_ldap.so`
+- Config file: `/etc/pam_ldap.conf`
+
+### Configure PAM LDAP
+
+Edit the LDAP configuration:
+
+```bash
+sudo nvim /etc/pam_ldap.conf
+```
+
+Basic configuration:
+
+```conf
+# LDAP server host
+host localhost
+
+# Base DN for user searches
+base ou=users,dc=example,dc=org
+
+# LDAP port
+port 389
+
+# Optional: Use LDAPS (secure)
+# ssl start_tls
+# port 636
+```
+
+Advanced options:
+
+```conf
+# Bind credentials (if required)
+binddn cn=readonly,dc=example,dc=org
+bindpw secretpassword
+
+# Search scope
+scope sub
+
+# Filter for user authentication
+pam_filter objectClass=posixAccount
+
+# Attribute mappings
+pam_login_attribute uid
+pam_member_attribute memberUid
+```
+
+### Configure PAM Service for LDAP
+
+Edit or create the PAM service file:
+
+```bash
+sudo nvim /etc/pam.d/postgresql
+```
+
+For LDAP authentication:
+
+```conf
+auth        required    pam_ldap.so
+account     required    pam_ldap.so
+```
+
+Or combine Unix and LDAP (fallback):
+
+```conf
+auth        sufficient  pam_ldap.so
+auth        required    pam_unix.so
+account     sufficient  pam_ldap.so
+account     required    pam_permit.so
+```
+
+:::tip sufficient vs required
+- `sufficient`: If successful, no further modules are checked
+- `required`: Must succeed, but continues checking other modules
+- `requisite`: Must succeed, stops immediately if fails
+:::
+
+## PgBouncer PAM Configuration
+
+If using PgBouncer as a connection pooler:
+
+### Configure PgBouncer
+
+Edit `pgbouncer.ini`:
+
+```ini
+[databases]
+mydb = host=localhost port=5432 dbname=mydb
+
+[pgbouncer]
+auth_type = pam
+auth_file = /etc/pgbouncer/userlist.txt
+```
+
+### Create PAM Service for PgBouncer
+
+```bash
+sudo nvim /etc/pam.d/pgbouncer
+```
+
+Content:
+
+```conf
+auth        required    pam_ldap.so
+account     required    pam_ldap.so
+```
+
+### Adjust Permissions
+
+```bash
+sudo chmod 444 /etc/shadow
+# Or add pgbouncer user to shadow group
+sudo usermod -aG shadow pgbouncer
+```
+
+## Testing and Troubleshooting
+
+### Test LDAP Connection
+
+```bash
+# Test LDAP search
+ldapsearch -x -H ldap://localhost:389 -b "ou=users,dc=example,dc=org"
+
+# Test specific user
+ldapsearch -x -H ldap://localhost:389 -b "ou=users,dc=example,dc=org" "(uid=username)"
+```
+
+### Check PAM Authentication
+
+Test PAM directly:
+
+```bash
+pamtester postgresql username authenticate
+```
+
+### View Logs
+
+```bash
+# PostgreSQL logs
+sudo tail -f /var/log/postgresql/postgresql-*.log
+
+# System auth logs
+sudo tail -f /var/log/auth.log        # Debian/Ubuntu
+sudo tail -f /var/log/secure          # RHEL/CentOS
+
+# PAM debug output
+journalctl -u postgresql -f
+```
+
+### Common Issues
+
+**Issue: Permission denied**
+```
+Solution: Check shadow file permissions and postgres user groups
+```
+
+**Issue: LDAP connection failed**
+```
+Solution: 
+- Verify LDAP server is running: systemctl status slapd
+- Test connectivity: telnet localhost 389
+- Check firewall: sudo firewall-cmd --list-all
+```
+
+**Issue: User not found in LDAP**
+```
+Solution:
+- Verify base DN in pam_ldap.conf
+- Check LDAP user's posixAccount objectClass
+- Test ldapsearch with same parameters
+```
+
+## Security Best Practices
+
+1. **Use SSL/TLS for LDAP**
+```conf
+ssl start_tls
+port 636
+tls_cacertdir /etc/ssl/certs
+```
+
+2. **Limit Database Access**
+```conf
+# Only allow specific users
+host    mydb    ldapuser1,ldapuser2    0.0.0.0/0    pam
+```
+
+3. **Use Read-Only LDAP Bind Account**
+```conf
+binddn cn=readonly,dc=example,dc=org
+```
+
+4. **Enable Logging**
+```conf
+auth    required    pam_unix.so debug
+```
+
+5. **Restrict Shadow File**
+```bash
+sudo usermod -aG shadow postgres
+sudo chmod 640 /etc/shadow
+```
+
+## Complete Example Configuration
+
+### pg_hba.conf
+```conf
+# TYPE  DATABASE  USER           ADDRESS      METHOD    OPTIONS
+local   all       postgres                    peer
+host    all       all            127.0.0.1/32 pam       pamservice=postgresql
+host    all       all            0.0.0.0/0    pam       pamservice=postgresql
+```
+
+### /etc/pam.d/postgresql
+```conf
+auth        sufficient  pam_ldap.so
+auth        required    pam_unix.so
+account     sufficient  pam_ldap.so
+account     required    pam_permit.so
+```
+
+### /etc/pam_ldap.conf
+```conf
+host ldap.example.org
+base ou=users,dc=example,dc=org
+port 389
+ssl start_tls
+pam_login_attribute uid
+pam_filter objectClass=posixAccount
+```
+
+## Additional Resources
+
+- [PostgreSQL Authentication Documentation](https://www.postgresql.org/docs/current/auth-methods.html)
+- [Linux PAM Documentation](http://www.linux-pam.org/Linux-PAM-html/)
+- [OpenLDAP Documentation](https://www.openldap.org/doc/)
+- [PgBouncer Documentation](https://www.pgbouncer.org/config.html)
+

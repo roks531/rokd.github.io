@@ -1,0 +1,236 @@
+---
+sidebar_position: 3
+---
+
+# Mouse and Keyboard Remapping in Linux
+
+A comprehensive guide for remapping mouse buttons and keyboard keys in Linux across different environments (X11, Wayland) and remote desktop solutions.
+
+## Mouse Button Remapping
+
+### Finding Your Mouse
+
+First, identify your mouse device:
+
+```bash
+xinput list  # Find the ID of your mouse (pointer)
+```
+
+### Testing Button Mappings
+
+Use `xev` to determine which button corresponds to which number:
+
+```bash
+xev  # Click in the window to see button numbers
+```
+
+### Remapping Mouse Buttons
+
+Reset to default mapping:
+
+```bash
+xinput set-button-map <mouse_id> 1 2 3 4 5 6 7 8 9
+```
+
+Example - swap middle click with button 9:
+
+```bash
+xinput set-button-map 8 1 9 3 4 5 6 7 8 2
+```
+
+:::tip Startup Configuration
+Add the command to your startup applications to make it permanent.
+:::
+
+### Logitech G300s Specific Configuration
+
+Install ratslap:
+
+```bash
+pacaur -S ratslap
+```
+
+Configure button G5 to Ctrl+B:
+
+```bash
+sudo ratslap --modify F3 --G5 LeftCtrl+B --print F3 --select F3
+```
+
+Configure button G5 as middle click:
+
+```bash
+sudo ratslap --modify F3 --G5 Button3 --print F3 --select F3
+```
+
+### Alternative Method with xbindkeys
+
+Install required packages:
+
+```bash
+sudo pacman -Syu xbindkeys xorg-xev xdotool
+```
+
+Create configuration file:
+
+```bash
+xbindkeys -f ~/.xbindkeysrc
+```
+
+Add to `~/.xbindkeysrc`:
+
+```bash
+"xdotool key ctrl+b"
+     b:8
+```
+
+Apply changes:
+
+```bash
+killall xbindkeys
+xbindkeys
+```
+
+## Keyboard Remapping
+
+### X11 - Using xmodmap
+
+Remap Super_L key to type "µ":
+
+```bash
+xmodmap -e 'keysym Super_L = mu mu mu'
+```
+
+:::info Finding Key Names
+Use `xev` to find the name of any key. Look for lines showing keysym information.
+:::
+
+Remap F8 to KP_0 and Shift+F8 to KP_Equal:
+
+```bash
+xmodmap -e "keycode 74 = KP_0 KP_Equal"
+```
+
+Clear Mod4 modifiers:
+
+```bash
+xmodmap -e 'clear Mod4'
+```
+
+### Making Changes Permanent
+
+**Option 1:** Add commands to `.bashrc`
+
+**Option 2:** Create `~/.Xmodmap` file with:
+
+```
+keysym Super_L = mu mu mu
+clear Mod4
+```
+
+## Wayland Keyboard Remapping
+
+### Using input-remapper
+
+Install input-remapper:
+
+```bash
+sudo dnf install input-remapper
+```
+
+Configuration:
+1. Open input-remapper GUI
+2. Under **Input**: Add KP_0 or use the record function
+3. Under **Output**: Find and select KEY_0
+
+## Using keyd (Modern Solution)
+
+### Installation
+
+```bash
+git clone https://github.com/rvaiya/keyd
+cd keyd
+make && sudo make install
+sudo systemctl enable keyd && sudo systemctl start keyd
+```
+
+### Configuration
+
+Edit `/etc/keyd/default.conf`:
+
+```ini
+[ids]
+*
+
+[main]
+# Remap F8 to 0
+f8 = 0
+```
+
+Restart keyd:
+
+```bash
+sudo systemctl restart keyd
+```
+
+## Remmina (RDP) Key Remapping
+
+### Scancode Remapping
+
+Go to: **Remmina Preferences → RDP → Keyboard scancode remapping**
+
+Example - swap 0 and F8:
+
+```
+0x0b=0x42,0x42=0x0b
+```
+
+:::warning
+You must restart Remmina after making changes!
+:::
+
+### Finding Scancodes
+
+1. Press `Ctrl+Alt+F2` to switch to TTY
+2. Login to your account
+3. Run:
+   ```bash
+   showkey --scancode
+   ```
+4. Press the key you want to remap
+5. Note the **first code** shown (e.g., if you see `0x0b 0x8b`, use `0x0b`)
+6. Press `Ctrl+Alt+F7` to return to graphical session
+
+## Quick Reference Table
+
+| Environment | Tool | Permanent? | Notes |
+|------------|------|-----------|-------|
+| X11 | xmodmap | No (unless configured) | Classic method |
+| X11 | xbindkeys | Yes (with config file) | More flexible |
+| Wayland | input-remapper | Yes | GUI-based |
+| Any | keyd | Yes | Modern, systemd-based |
+| RDP/Remmina | Built-in | Yes | Scancode remapping |
+
+## Troubleshooting
+
+### Changes Don't Persist
+- Add commands to startup applications
+- Create configuration files in home directory
+- Use systemd services (like keyd)
+
+### Key Not Working in Wayland
+- X11 tools like xmodmap won't work in Wayland
+- Use input-remapper or keyd instead
+
+### Remmina Remapping Not Working
+- Make sure to restart Remmina completely
+- Verify scancode values with `showkey`
+- Check if RDP server allows key remapping
+
+## Best Practices
+
+1. **Test First**: Always test remapping before making it permanent
+2. **Backup**: Note your original configuration before changing
+3. **Use xev**: Great tool for discovering key codes and button numbers
+4. **Choose Right Tool**: Use keyd for modern systems, xmodmap for legacy
+5. **Document Changes**: Keep notes of your custom mappings
+

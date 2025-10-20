@@ -1,0 +1,821 @@
+---
+sidebar_position: 6
+---
+
+# PostgreSQL Foreign Data Wrapper (FDW)
+
+Guide for setting up and using PostgreSQL Foreign Data Wrappers to access data from remote databases as if they were local tables.
+
+## Overview
+
+Foreign Data Wrappers (FDW) allow you to:
+- Query data from remote PostgreSQL databases
+- Join local and remote tables in a single query
+- Access data from other database systems (MySQL, Oracle, MongoDB, etc.)
+- Create a federated database architecture
+- Implement data integration without ETL processes
+
+## What is FDW?
+
+FDW implements the SQL/MED (Management of External Data) standard, enabling PostgreSQL to access external data sources using a consistent SQL interface.
+
+```
+┌─────────────────────────────────────┐
+│      Local PostgreSQL Database      │
+│                                     │
+│  ┌──────────────┐  ┌─────────────┐ │
+│  │ Local Tables │  │Foreign Tables│ │
+│  └──────────────┘  └──────┬──────┘ │
+│                           │         │
+└───────────────────────────┼─────────┘
+                            │ FDW
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+│Remote PG DB #1│  │Remote PG DB #2│  │Remote PG DB #3│
+│ 192.168.1.13  │  │ 192.168.1.14  │  │ 192.168.1.15  │
+└───────────────┘  └───────────────┘  └───────────────┘
+```
+
+## Part 1: Basic Setup
+
+### Prerequisites
+
+- PostgreSQL 9.3 or later (FDW built-in)
+- Network access to remote database
+- Valid credentials for remote database
+
+### Install postgres_fdw Extension
+
+On the **local database** where you want to access remote data:
+
+```sql
+-- Connect to your database
+\c your_database
+
+-- Install the FDW extension
+CREATE EXTENSION IF NOT EXISTS postgres_fdw;
+
+-- Verify installation
+SELECT * FROM pg_extension WHERE extname = 'postgres_fdw';
+```
+
+## Part 2: Create Foreign Server
+
+A **foreign server** defines the connection to a remote database.
+
+### Basic Syntax
+
+```sql
+CREATE SERVER server_name
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (
+        host 'remote_host',
+        port 'remote_port',
+        dbname 'remote_database'
+    );
+```
+
+### Example: Create Foreign Server
+
+```sql
+-- Create a foreign server pointing to a remote database
+CREATE SERVER nov_indeks_fdw
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (
+        dbname 'testna',
+        host '192.168.1.13',
+        port '5433'
+    );
+```
+
+### Server Options
+
+| Option | Description | Required |
+|--------|-------------|----------|
+| `host` | Remote server hostname or IP | Yes |
+| `port` | Remote PostgreSQL port | No (default: 5432) |
+| `dbname` | Remote database name | Yes |
+| `use_remote_estimate` | Use remote query planner | No (default: false) |
+| `fetch_size` | Number of rows per fetch | No (default: 100) |
+| `extensions` | Extensions to use remotely | No |
+
+### List Foreign Servers
+
+```sql
+-- View all foreign servers
+SELECT * FROM pg_foreign_server;
+
+-- Or use \des command
+\des
+```
+
+## Part 3: Create User Mapping
+
+User mappings define how local users authenticate to the remote server.
+
+### Basic Syntax
+
+```sql
+CREATE USER MAPPING FOR local_user
+    SERVER server_name
+    OPTIONS (
+        user 'remote_user',
+        password 'remote_password'
+    );
+```
+
+### Example: Single User Mapping
+
+```sql
+-- Map current user to remote credentials
+CREATE USER MAPPING FOR CURRENT_USER
+    SERVER nov_indeks_fdw
+    OPTIONS (
+        user 'snake',
+        password 'password'
+    );
+```
+
+### Example: Multiple User Mappings
+
+```sql
+-- Map specific local user
+CREATE USER MAPPING FOR john_local
+    SERVER nov_indeks_fdw
+    OPTIONS (
+        user 'john_remote',
+        password 'johns_password'
+    );
+
+-- Map another user
+CREATE USER MAPPING FOR jane_local
+    SERVER nov_indeks_fdw
+    OPTIONS (
+        user 'jane_remote',
+        password 'janes_password'
+    );
+
+-- Map public (all users)
+CREATE USER MAPPING FOR PUBLIC
+    SERVER nov_indeks_fdw
+    OPTIONS (
+        user 'readonly_user',
+        password 'readonly_password'
+    );
+```
+
+:::warning Security Consideration
+Passwords are stored in plain text in `pg_user_mapping`. Consider using:
+- `.pgpass` file instead
+- SSL certificates for authentication
+- Restricted network access
+:::
+
+### Using .pgpass for Passwords
+
+Instead of storing passwords in user mappings:
+
+1. Create `.pgpass` file in postgres user's home:
+
+```bash
+# /var/lib/postgresql/.pgpass
+192.168.1.13:5433:testna:snake:password
+192.168.1.14:5432:production:dbuser:secretpass
+```
+
+2. Set permissions:
+
+```bash
+chmod 0600 /var/lib/postgresql/.pgpass
+chown postgres:postgres /var/lib/postgresql/.pgpass
+```
+
+3. Create user mapping without password:
+
+```sql
+CREATE USER MAPPING FOR CURRENT_USER
+    SERVER nov_indeks_fdw
+    OPTIONS (user 'snake');
+```
+
+### List User Mappings
+
+```sql
+-- View all user mappings
+SELECT * FROM pg_user_mappings;
+
+-- Or use \deu command
+\deu
+```
+
+## Part 4: Create Foreign Tables
+
+Foreign tables are local representations of remote tables.
+
+### Method 1: Manual Creation
+
+Define the table structure explicitly:
+
+```sql
+CREATE FOREIGN TABLE public.nov_indeks (
+    id INTEGER,
+    naziv VARCHAR(255),
+    vrednost NUMERIC(10,2),
+    datum DATE
+)
+SERVER nov_indeks_fdw
+OPTIONS (
+    schema_name 'public',
+    table_name 'indeks'
+);
+```
+
+### Method 2: Import Foreign Schema
+
+Automatically import all or selected tables:
+
+```sql
+-- Import all tables from remote schema
+IMPORT FOREIGN SCHEMA public
+FROM SERVER nov_indeks_fdw
+INTO local_schema;
+
+-- Import specific tables
+IMPORT FOREIGN SCHEMA public
+LIMIT TO (customers, orders, products)
+FROM SERVER nov_indeks_fdw
+INTO local_schema;
+
+-- Import all except specific tables
+IMPORT FOREIGN SCHEMA public
+EXCEPT (audit_log, temp_data)
+FROM SERVER nov_indeks_fdw
+INTO public;
+```
+
+### Foreign Table Options
+
+```sql
+CREATE FOREIGN TABLE remote_table (
+    id INTEGER,
+    data TEXT
+)
+SERVER my_server
+OPTIONS (
+    schema_name 'public',         -- Remote schema
+    table_name 'actual_table',    -- Remote table name
+    updatable 'false'             -- Read-only table
+);
+```
+
+### List Foreign Tables
+
+```sql
+-- View all foreign tables
+SELECT * FROM information_schema.foreign_tables;
+
+-- Or use \det command
+\det
+
+-- Detailed info
+\d+ foreign_table_name
+```
+
+## Part 5: Querying Foreign Tables
+
+Once set up, foreign tables work like regular tables.
+
+### Simple Queries
+
+```sql
+-- Select data
+SELECT * FROM nov_indeks;
+
+-- Filter data
+SELECT * FROM nov_indeks WHERE datum > '2024-01-01';
+
+-- Aggregate data
+SELECT COUNT(*), AVG(vrednost) FROM nov_indeks;
+```
+
+### Joining Local and Remote Tables
+
+```sql
+-- Join local table with foreign table
+SELECT 
+    l.customer_id,
+    l.order_date,
+    r.product_name,
+    r.price
+FROM local_orders l
+JOIN nov_indeks r ON l.product_id = r.id
+WHERE l.order_date > CURRENT_DATE - INTERVAL '30 days';
+```
+
+### Multi-Server Queries
+
+```sql
+-- Query from multiple remote servers
+SELECT 
+    a.customer_name,
+    b.order_total,
+    c.inventory_count
+FROM server1.customers a
+JOIN server2.orders b ON a.id = b.customer_id
+LEFT JOIN server3.inventory c ON b.product_id = c.product_id;
+```
+
+## Part 6: Performance Optimization
+
+### Use Remote Estimates
+
+Enable remote query planning:
+
+```sql
+ALTER SERVER nov_indeks_fdw
+OPTIONS (ADD use_remote_estimate 'true');
+```
+
+### Adjust Fetch Size
+
+Increase fetch size for large result sets:
+
+```sql
+ALTER SERVER nov_indeks_fdw
+OPTIONS (ADD fetch_size '1000');
+```
+
+### Push Down Operations
+
+PostgreSQL automatically pushes down:
+- WHERE clauses
+- JOIN conditions
+- Aggregate functions
+- Sorting (ORDER BY)
+
+Example query plan:
+
+```sql
+EXPLAIN (VERBOSE) SELECT * FROM nov_indeks WHERE vrednost > 1000;
+```
+
+Output shows which operations are pushed to remote server:
+```
+Foreign Scan on public.nov_indeks
+  Output: id, naziv, vrednost, datum
+  Remote SQL: SELECT id, naziv, vrednost, datum 
+              FROM public.indeks 
+              WHERE vrednost > 1000
+```
+
+### Avoid These Patterns
+
+❌ **Don't** use functions that can't be pushed down:
+
+```sql
+-- This fetches ALL rows then filters locally (slow)
+SELECT * FROM nov_indeks 
+WHERE my_custom_function(vrednost) > 100;
+```
+
+✅ **Do** use standard SQL operations:
+
+```sql
+-- This filters remotely (fast)
+SELECT * FROM nov_indeks 
+WHERE vrednost > 100 AND datum >= '2024-01-01';
+```
+
+### Create Materialized Views
+
+For frequently accessed data, cache it locally:
+
+```sql
+-- Create materialized view
+CREATE MATERIALIZED VIEW local_nov_indeks AS
+SELECT * FROM nov_indeks;
+
+-- Refresh periodically
+REFRESH MATERIALIZED VIEW local_nov_indeks;
+
+-- Or set up automatic refresh with pg_cron
+SELECT cron.schedule('refresh-nov-indeks', '0 * * * *', 
+  'REFRESH MATERIALIZED VIEW local_nov_indeks');
+```
+
+## Part 7: DBeaver Setup
+
+DBeaver is a popular database GUI that can work with foreign tables.
+
+### Connecting to Local Database
+
+1. Open DBeaver
+2. Click **Database** → **New Database Connection**
+3. Select **PostgreSQL**
+4. Enter connection details:
+   - Host: `localhost` or `192.168.1.10`
+   - Port: `5432`
+   - Database: `your_database`
+   - Username: Your PostgreSQL user
+   - Password: Your password
+5. Click **Test Connection**, then **Finish**
+
+### Viewing Foreign Tables
+
+Foreign tables appear in the schema tree just like regular tables:
+
+```
+├── your_database
+│   ├── Schemas
+│   │   ├── public
+│   │   │   ├── Tables
+│   │   │   │   ├── local_table1
+│   │   │   │   ├── local_table2
+│   │   │   ├── Foreign Tables
+│   │   │   │   ├── nov_indeks ⚡ (192.168.1.13)
+│   │   │   │   ├── other_remote_table ⚡
+```
+
+### Querying in DBeaver
+
+1. Open **SQL Editor** (Ctrl+])
+2. Write your query:
+
+```sql
+-- Query foreign table
+SELECT * FROM nov_indeks LIMIT 100;
+
+-- Join local and remote
+SELECT 
+    l.id,
+    l.local_column,
+    r.naziv,
+    r.vrednost
+FROM local_table l
+JOIN nov_indeks r ON l.remote_id = r.id;
+```
+
+3. Press **Ctrl+Enter** or click **Execute SQL Script**
+
+### ER Diagrams with Foreign Tables
+
+DBeaver can generate ER diagrams including foreign tables:
+
+1. Right-click on schema → **View Diagram**
+2. Foreign tables appear with a different icon (⚡)
+3. Relationships between local and foreign tables are shown
+
+:::tip DBeaver Tip
+Use **Ctrl+Space** for autocomplete that includes foreign table columns!
+:::
+
+## Part 8: Write Operations
+
+Foreign tables can support write operations if properly configured.
+
+### Enable Writes
+
+```sql
+-- Make foreign table updatable
+ALTER FOREIGN TABLE nov_indeks
+OPTIONS (ADD updatable 'true');
+```
+
+### Insert Data
+
+```sql
+INSERT INTO nov_indeks (id, naziv, vrednost, datum)
+VALUES (1001, 'New Entry', 99.99, CURRENT_DATE);
+```
+
+### Update Data
+
+```sql
+UPDATE nov_indeks
+SET vrednost = 150.00
+WHERE id = 1001;
+```
+
+### Delete Data
+
+```sql
+DELETE FROM nov_indeks
+WHERE id = 1001;
+```
+
+### Transactions
+
+Foreign table operations participate in local transactions:
+
+```sql
+BEGIN;
+
+-- Insert to local table
+INSERT INTO local_orders (customer_id, amount) 
+VALUES (123, 500.00);
+
+-- Update foreign table
+UPDATE nov_indeks 
+SET vrednost = vrednost + 10 
+WHERE id = 456;
+
+-- Both commit or rollback together
+COMMIT;  -- or ROLLBACK;
+```
+
+:::warning Transaction Limitations
+Two-phase commit is NOT supported. If the remote server crashes after commit, the transaction may be inconsistent.
+:::
+
+## Part 9: Monitoring and Troubleshooting
+
+### Check FDW Statistics
+
+```sql
+-- View foreign server statistics
+SELECT * FROM pg_stat_user_tables 
+WHERE relname IN (
+    SELECT ftrelid::regclass::text 
+    FROM pg_foreign_table
+);
+```
+
+### Monitor Queries
+
+```sql
+-- Active queries on foreign tables
+SELECT 
+    pid,
+    usename,
+    query,
+    state,
+    query_start
+FROM pg_stat_activity
+WHERE query LIKE '%nov_indeks%';
+```
+
+### Debug Connection Issues
+
+```sql
+-- Test foreign server connection
+SELECT * FROM nov_indeks LIMIT 1;
+```
+
+Common errors:
+
+**Connection refused**:
+- Check network connectivity: `ping 192.168.1.13`
+- Verify PostgreSQL is running on remote server
+- Check firewall rules
+
+**Authentication failed**:
+- Verify credentials in user mapping
+- Check `pg_hba.conf` on remote server
+- Ensure remote user has necessary privileges
+
+**Permission denied**:
+- Grant SELECT privilege on remote table:
+```sql
+-- On remote server
+GRANT SELECT ON TABLE indeks TO snake;
+```
+
+### View FDW Configuration
+
+```sql
+-- Show server options
+SELECT 
+    srvname AS server_name,
+    srvoptions AS options
+FROM pg_foreign_server;
+
+-- Show user mapping options
+SELECT 
+    usename,
+    srvname,
+    umoptions
+FROM pg_user_mappings;
+
+-- Show foreign table options
+SELECT 
+    ft.ftrelid::regclass AS foreign_table,
+    fs.srvname AS server,
+    ft.ftoptions
+FROM pg_foreign_table ft
+JOIN pg_foreign_server fs ON ft.ftserver = fs.oid;
+```
+
+## Part 10: Security Best Practices
+
+### 1. Use Dedicated FDW User
+
+Create a dedicated user on the remote server:
+
+```sql
+-- On remote server
+CREATE USER fdw_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE testna TO fdw_user;
+GRANT USAGE ON SCHEMA public TO fdw_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO fdw_user;
+```
+
+### 2. Restrict Network Access
+
+Configure `pg_hba.conf` on remote server:
+
+```conf
+# Allow FDW connections only from specific host
+host    testna    fdw_user    192.168.1.10/32    scram-sha-256
+```
+
+### 3. Use SSL Connections
+
+Enable SSL for foreign server:
+
+```sql
+CREATE SERVER secure_server
+    FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (
+        host '192.168.1.13',
+        port '5433',
+        dbname 'testna',
+        sslmode 'require',
+        sslcert '/path/to/client.crt',
+        sslkey '/path/to/client.key',
+        sslrootcert '/path/to/ca.crt'
+    );
+```
+
+### 4. Read-Only Foreign Tables
+
+Prevent accidental modifications:
+
+```sql
+ALTER FOREIGN TABLE nov_indeks
+OPTIONS (ADD updatable 'false');
+```
+
+### 5. Grant Minimal Privileges
+
+```sql
+-- On remote server, grant only necessary privileges
+GRANT SELECT ON specific_table TO fdw_user;
+-- Don't grant INSERT, UPDATE, DELETE unless needed
+```
+
+## Part 11: Advanced Use Cases
+
+### Partitioning with Foreign Tables
+
+Use foreign tables as partitions:
+
+```sql
+-- Create partitioned table
+CREATE TABLE all_data (
+    id INTEGER,
+    region TEXT,
+    data TEXT
+) PARTITION BY LIST (region);
+
+-- Local partition
+CREATE TABLE data_local PARTITION OF all_data
+FOR VALUES IN ('local');
+
+-- Foreign table partition
+CREATE FOREIGN TABLE data_remote PARTITION OF all_data
+FOR VALUES IN ('remote')
+SERVER remote_server;
+```
+
+### Data Federation
+
+Query across multiple databases:
+
+```sql
+-- Create servers for multiple databases
+CREATE SERVER db1_server FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'db1.example.com', dbname 'sales');
+
+CREATE SERVER db2_server FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'db2.example.com', dbname 'inventory');
+
+CREATE SERVER db3_server FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'db3.example.com', dbname 'customers');
+
+-- Import schemas
+IMPORT FOREIGN SCHEMA public FROM SERVER db1_server INTO sales_schema;
+IMPORT FOREIGN SCHEMA public FROM SERVER db2_server INTO inventory_schema;
+IMPORT FOREIGN SCHEMA public FROM SERVER db3_server INTO customer_schema;
+
+-- Query across all databases
+SELECT 
+    c.customer_name,
+    s.order_total,
+    i.stock_level
+FROM customer_schema.customers c
+JOIN sales_schema.orders s ON c.id = s.customer_id
+JOIN inventory_schema.products i ON s.product_id = i.id;
+```
+
+### Read Replica Access
+
+Use FDW to access read replicas:
+
+```sql
+-- Connect to read replica for heavy queries
+CREATE SERVER read_replica FOREIGN DATA WRAPPER postgres_fdw
+    OPTIONS (host 'replica.example.com', dbname 'production');
+
+-- Create foreign tables pointing to replica
+IMPORT FOREIGN SCHEMA public 
+FROM SERVER read_replica 
+INTO replica_schema;
+
+-- Query replica for analytics
+SELECT * FROM replica_schema.large_table
+WHERE date > CURRENT_DATE - INTERVAL '1 year';
+```
+
+## Cleanup Commands
+
+### Drop Foreign Table
+
+```sql
+DROP FOREIGN TABLE IF EXISTS nov_indeks CASCADE;
+```
+
+### Drop User Mapping
+
+```sql
+DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER nov_indeks_fdw;
+```
+
+### Drop Server
+
+```sql
+DROP SERVER IF EXISTS nov_indeks_fdw CASCADE;
+```
+
+### Drop Extension
+
+```sql
+DROP EXTENSION IF EXISTS postgres_fdw CASCADE;
+```
+
+## Other FDW Extensions
+
+PostgreSQL supports FDW for other data sources:
+
+| Extension | Data Source |
+|-----------|-------------|
+| `postgres_fdw` | PostgreSQL (built-in) |
+| `mysql_fdw` | MySQL/MariaDB |
+| `oracle_fdw` | Oracle Database |
+| `mongodb_fdw` | MongoDB |
+| `redis_fdw` | Redis |
+| `file_fdw` | CSV files (built-in) |
+| `jdbc_fdw` | Any JDBC-compatible database |
+
+### Example: file_fdw for CSV
+
+```sql
+-- Enable file_fdw
+CREATE EXTENSION file_fdw;
+
+-- Create server
+CREATE SERVER csv_server FOREIGN DATA WRAPPER file_fdw;
+
+-- Create foreign table
+CREATE FOREIGN TABLE csv_data (
+    id INTEGER,
+    name TEXT,
+    value NUMERIC
+)
+SERVER csv_server
+OPTIONS (filename '/path/to/data.csv', format 'csv', header 'true');
+
+-- Query CSV as table
+SELECT * FROM csv_data;
+```
+
+## Best Practices Summary
+
+1. ✅ **Use user mappings per user** instead of PUBLIC
+2. ✅ **Enable SSL** for production environments
+3. ✅ **Grant minimal privileges** on remote server
+4. ✅ **Use .pgpass** instead of password in user mapping
+5. ✅ **Monitor query performance** and adjust fetch_size
+6. ✅ **Create indexes** on remote tables for better performance
+7. ✅ **Use materialized views** for frequently accessed data
+8. ✅ **Document your foreign servers** and their purposes
+9. ✅ **Test failover scenarios** if using HA setups
+10. ✅ **Regular security audits** of FDW configurations
+
+## Additional Resources
+
+- [PostgreSQL FDW Documentation](https://www.postgresql.org/docs/current/postgres-fdw.html)
+- [SQL/MED Standard](https://en.wikipedia.org/wiki/SQL/MED)
+- [postgres_fdw Performance](https://www.postgresql.org/docs/current/postgres-fdw.html#POSTGRES-FDW-OPTIONS)
+- [DBeaver Documentation](https://dbeaver.io/docs/)
+- [Other FDW Extensions](https://wiki.postgresql.org/wiki/Foreign_data_wrappers)

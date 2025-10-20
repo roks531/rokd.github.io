@@ -1,0 +1,472 @@
+---
+sidebar_position: 3
+---
+
+# Upgrading PostgreSQL on AlmaLinux
+
+Complete guide for upgrading PostgreSQL from one major version to another (e.g., 17 to 18) on AlmaLinux/RHEL-based systems using `pg_upgrade`.
+
+## Overview
+
+PostgreSQL major version upgrades require migrating data from the old version to the new one. The `pg_upgrade` tool provides a fast, in-place upgrade with minimal downtime using hard links.
+
+:::warning Before You Start
+- **Backup your database** before starting the upgrade
+- Plan for downtime (though upgrade is usually fast)
+- Test the upgrade process in a development environment first
+- Ensure you have enough disk space (especially if not using `--link`)
+:::
+
+## Step 1: Install New PostgreSQL Version
+
+Install the new PostgreSQL version and any extensions you need:
+
+```bash
+sudo dnf install postgresql18 postgresql18-server postgresql18-contrib
+```
+
+If you use PostGIS or other extensions:
+
+```bash
+sudo dnf install postgis36_18
+```
+
+:::tip Extension Versions
+Match extension versions to your PostgreSQL version. For example:
+- PostGIS 3.6 for PostgreSQL 18: `postgis36_18`
+- PostGIS 3.6 for PostgreSQL 17: `postgis36_17`
+:::
+
+## Step 2: Stop Old PostgreSQL Service
+
+Stop the running PostgreSQL service:
+
+```bash
+sudo systemctl stop postgresql-17
+```
+
+Verify it's stopped:
+
+```bash
+sudo systemctl status postgresql-17
+```
+
+## Step 3: Initialize New Cluster
+
+Initialize the new PostgreSQL data directory:
+
+```bash
+sudo /usr/pgsql-18/bin/postgresql-18-setup initdb
+```
+
+This creates a new, empty database cluster at `/var/lib/pgsql/18/data`.
+
+## Step 4: Enable Data Checksums (If Needed)
+
+If you encounter an error about data checksums during the upgrade check:
+
+```
+old cluster does not use data checksums but the new one does
+```
+
+Enable checksums on the old cluster:
+
+```bash
+sudo -iu postgres /usr/pgsql-17/bin/pg_checksums \
+  --enable --progress --verbose \
+  -D /var/lib/pgsql/17/data
+```
+
+Verify checksums are enabled:
+
+```bash
+sudo -iu postgres /usr/pgsql-17/bin/pg_controldata /var/lib/pgsql/17/data \
+  | grep 'Data page checksum'
+```
+
+Expected output: `Data page checksum version: 1`
+
+:::info What are Data Checksums?
+Data checksums detect corruption in data files. They're recommended for production databases. The new cluster enables them by default.
+:::
+
+## Step 5: Check Upgrade Compatibility
+
+Run `pg_upgrade` in check mode to verify compatibility:
+
+```bash
+sudo -iu postgres /usr/pgsql-18/bin/pg_upgrade \
+  --old-bindir=/usr/pgsql-17/bin \
+  --new-bindir=/usr/pgsql-18/bin \
+  --old-datadir=/var/lib/pgsql/17/data \
+  --new-datadir=/var/lib/pgsql/18/data \
+  --link --check
+```
+
+This performs compatibility checks without making changes.
+
+:::tip Understanding the Options
+- `--old-bindir`: Path to old PostgreSQL binaries
+- `--new-bindir`: Path to new PostgreSQL binaries
+- `--old-datadir`: Path to old data directory
+- `--new-datadir`: Path to new data directory
+- `--link`: Use hard links (fast, saves space)
+- `--check`: Only check compatibility, don't upgrade
+:::
+
+### Common Check Failures
+
+**Extension version mismatch:**
+```bash
+# Install matching extension versions
+sudo dnf install postgis36_17 postgis36_18
+```
+
+**Old server still running:**
+```bash
+sudo systemctl stop postgresql-17
+```
+
+## Step 6: Perform the Upgrade
+
+If the check passes, run the actual upgrade:
+
+```bash
+sudo -iu postgres /usr/pgsql-18/bin/pg_upgrade \
+  --old-bindir=/usr/pgsql-17/bin \
+  --new-bindir=/usr/pgsql-18/bin \
+  --old-datadir=/var/lib/pgsql/17/data \
+  --new-datadir=/var/lib/pgsql/18/data \
+  --link -j "$(nproc)"
+```
+
+Additional flags:
+- `-j "$(nproc)"`: Use all CPU cores for parallel processing (faster)
+
+:::caution Using --link
+The `--link` flag creates hard links instead of copying files. This is much faster but:
+- Old and new data directories must be on the same filesystem
+- You cannot revert to the old version without a backup
+- If upgrade fails, you may need to restore from backup
+:::
+
+## Step 7: Check Upgrade Logs (If Errors Occur)
+
+If the upgrade fails, check the logs:
+
+```bash
+sudo -iu postgres bash -s <<'BASH'
+dir=$(ls -d /var/lib/pgsql/18/data/pg_upgrade_output.d/*/log | tail -1)
+for f in "$dir"/pg_upgrade_dump_*.log; do
+  echo "===== $f ====="
+  egrep -i "ERROR|FATAL|PANIC" "$f" || tail -n 50 "$f"
+done
+BASH
+```
+
+### Common Upgrade Errors
+
+**PostGIS Extension Error:**
+```
+could not load library postgis-3.so
+```
+
+Solution: Install PostGIS for both versions:
+```bash
+sudo dnf install postgis36_17 postgis36_18
+```
+
+**Extension Version Mismatch:**
+```
+extension "xxx" has incompatible version
+```
+
+Solution: Update the extension in the old cluster first or install compatible versions.
+
+## Step 8: Configure New Cluster
+
+Copy or merge your configuration files:
+
+### Option A: Copy Old Configuration
+
+```bash
+sudo cp /var/lib/pgsql/17/data/postgresql.conf /var/lib/pgsql/18/data/
+sudo cp /var/lib/pgsql/17/data/pg_hba.conf /var/lib/pgsql/18/data/
+```
+
+### Option B: Manually Merge Settings
+
+Compare and merge settings manually:
+
+```bash
+# View old config
+sudo cat /var/lib/pgsql/17/data/postgresql.conf
+
+# Edit new config
+sudo -iu postgres vi /var/lib/pgsql/18/data/postgresql.conf
+```
+
+Common settings to check:
+- `listen_addresses`
+- `port` (change if testing both versions)
+- `max_connections`
+- `shared_buffers`
+- `work_mem`
+- SSL settings
+- Authentication settings in `pg_hba.conf`
+
+:::warning Configuration Compatibility
+Some configuration parameters may have changed between versions. Review the PostgreSQL release notes for deprecated or changed parameters.
+:::
+
+## Step 9: Start New PostgreSQL Service
+
+Enable and start the new PostgreSQL service:
+
+```bash
+sudo systemctl enable postgresql-18
+sudo systemctl start postgresql-18
+```
+
+Check status:
+
+```bash
+sudo systemctl status postgresql-18
+```
+
+Verify the port:
+
+```bash
+sudo ss -tlnp | grep postgres
+```
+
+## Step 10: Run VACUUM ANALYZE
+
+Optimize the database statistics:
+
+```bash
+sudo -iu postgres /usr/pgsql-18/bin/vacuumdb \
+  --all --analyze-in-stages --verbose
+```
+
+This updates statistics for the query planner. The `--analyze-in-stages` option runs a fast analyze first, then a more thorough one.
+
+:::info Why VACUUM ANALYZE?
+After upgrading, the new version needs to collect fresh statistics about your data for optimal query performance.
+:::
+
+## Step 11: Update Extensions
+
+If you have extensions installed, update them:
+
+```bash
+# The upgrade process creates this script
+sudo -iu postgres /usr/pgsql-18/bin/psql -f ~postgres/update_extensions.sql
+```
+
+Or manually for each database:
+
+```sql
+-- Connect to each database
+\c mydatabase
+
+-- Update all extensions
+SELECT 'ALTER EXTENSION ' || extname || ' UPDATE;'
+FROM pg_extension
+WHERE extname NOT IN ('plpgsql');
+
+-- Run the generated commands
+ALTER EXTENSION postgis UPDATE;
+ALTER EXTENSION pg_stat_statements UPDATE;
+```
+
+## Step 12: Cleanup Old Version
+
+### Review Cleanup Script
+
+Check what will be deleted:
+
+```bash
+sudo -iu postgres bash -lc 'echo "Script contents:"; cat ~postgres/delete_old_cluster.sh'
+```
+
+### Run Cleanup Script
+
+If everything looks good, delete the old cluster:
+
+```bash
+sudo -iu postgres bash ~postgres/delete_old_cluster.sh
+```
+
+### Remove Old Packages
+
+Uninstall the old PostgreSQL version:
+
+```bash
+sudo dnf remove -y postgresql17-server postgresql17 postgresql17-contrib
+```
+
+Remove old extensions:
+
+```bash
+sudo dnf remove -y postgis36_17
+```
+
+:::danger Before Cleanup
+Only delete the old cluster after:
+- Confirming the new version works correctly
+- Testing all applications and connections
+- Verifying all data is accessible
+- Ideally, after a few days of production use
+:::
+
+## Verification
+
+### Check PostgreSQL Version
+
+```bash
+sudo -iu postgres psql -c "SELECT version();"
+```
+
+### Verify Databases
+
+```bash
+sudo -iu postgres psql -l
+```
+
+### Test Connections
+
+```bash
+psql -h localhost -U myuser -d mydb
+```
+
+### Check Extensions
+
+```sql
+SELECT * FROM pg_available_extensions ORDER BY name;
+```
+
+### Monitor Logs
+
+```bash
+sudo tail -f /var/lib/pgsql/18/data/log/postgresql-*.log
+```
+
+## Rollback (If Needed)
+
+If you didn't use `--link` and kept the old data:
+
+1. Stop new version:
+   ```bash
+   sudo systemctl stop postgresql-18
+   ```
+
+2. Start old version:
+   ```bash
+   sudo systemctl start postgresql-17
+   ```
+
+3. Restore from backup if needed
+
+:::warning Rollback with --link
+If you used `--link`, rollback is not possible without restoring from backup because the old data directory was modified.
+:::
+
+## Performance Tuning After Upgrade
+
+Update configuration for PostgreSQL 18:
+
+```bash
+sudo -iu postgres vi /var/lib/pgsql/18/data/postgresql.conf
+```
+
+Consider new PostgreSQL 18 features and parameters:
+- Review release notes for new settings
+- Adjust memory settings based on new version
+- Enable new performance features
+
+Restart after changes:
+
+```bash
+sudo systemctl restart postgresql-18
+```
+
+## Troubleshooting
+
+### Port Already in Use
+
+If testing both versions simultaneously:
+
+```bash
+# Edit new cluster config
+sudo -iu postgres vi /var/lib/pgsql/18/data/postgresql.conf
+
+# Change port
+port = 5433
+```
+
+### Permission Denied
+
+Ensure postgres user owns all files:
+
+```bash
+sudo chown -R postgres:postgres /var/lib/pgsql/18/data
+```
+
+### SELinux Issues
+
+If SELinux blocks operations:
+
+```bash
+# Check SELinux denials
+sudo ausearch -m avc -ts recent
+
+# Temporarily disable (troubleshooting only)
+sudo setenforce 0
+
+# Re-enable
+sudo setenforce 1
+```
+
+### Connection Refused
+
+Check if PostgreSQL is listening:
+
+```bash
+sudo ss -tlnp | grep postgres
+```
+
+Check firewall:
+
+```bash
+sudo firewall-cmd --list-all
+sudo firewall-cmd --add-service=postgresql --permanent
+sudo firewall-cmd --reload
+```
+
+## Best Practices
+
+1. **Test in Development**: Always test the upgrade process in a non-production environment first
+
+2. **Backup Everything**: Take a full backup before starting:
+   ```bash
+   sudo -iu postgres pg_dumpall > /backup/full_backup.sql
+   ```
+
+3. **Schedule Maintenance Window**: Plan for downtime even though upgrade is fast
+
+4. **Monitor After Upgrade**: Watch logs and performance metrics closely after upgrade
+
+5. **Keep Old Packages**: Don't uninstall old version immediately; wait a few days
+
+6. **Document Settings**: Keep notes of custom configurations and changes made
+
+7. **Extension Compatibility**: Verify all extensions have versions compatible with new PostgreSQL
+
+## Additional Resources
+
+- [PostgreSQL Upgrade Documentation](https://www.postgresql.org/docs/current/pgupgrade.html)
+- [PostgreSQL 18 Release Notes](https://www.postgresql.org/docs/18/release-18.html)
+- [pg_upgrade Reference](https://www.postgresql.org/docs/current/app-pgupgrade.html)
+- [PostgreSQL YUM Repository](https://yum.postgresql.org/)
+

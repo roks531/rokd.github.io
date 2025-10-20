@@ -9,8 +9,8 @@ import Typed from 'typed.js'; // Import Typed.js
 import Head from '@docusaurus/Head'; // Import Head component for SEO
 
 
-// Image Carousel
-function ImageCarousel() {
+// Modern Image Gallery with Lightbox
+function ImageGallery() {
   const images = [
     '/img/index_page/DSC07939.jpg',
     '/img/index_page/DSC08325.JPG',
@@ -42,99 +42,91 @@ function ImageCarousel() {
     '/img/index_page/DSC08515.jpg',
   ];
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
-  // Autoplay functionality
-  useEffect(() => {
-    let interval;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
-      }, 3000); // Change every 3 seconds
-    }
-    return () => clearInterval(interval);
-  }, [images.length, isPlaying]);
-
-  // Handle manual navigation
-  const handleNext = () => setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
-  const handlePrev = () => setCurrentIndex((prevIndex) => (prevIndex - 1 + images.length) % images.length);
-
-  // Handle thumbnail click
-  const handleThumbnailClick = (index) => {
-    setCurrentIndex(index);
+  const openLightbox = (index) => {
+    setSelectedImageIndex(index);
+    setLightboxOpen(true);
   };
 
-  // Pause/Resume Autoplay
-  const toggleAutoplay = () => setIsPlaying((prev) => !prev);
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+  };
+
+  const nextImage = () => {
+    setSelectedImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+  };
+
+  const prevImage = () => {
+    setSelectedImageIndex((prevIndex) => (prevIndex - 1 + images.length) % images.length);
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!lightboxOpen) return;
+      if (e.key === 'ArrowRight') nextImage();
+      if (e.key === 'ArrowLeft') prevImage();
+      if (e.key === 'Escape') closeLightbox();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxOpen]);
 
   return (
-    <div className={styles.carouselContainer}>
-      {/* Main Image */}
-      <div className={styles.imageWrapper}>
-        <AnimatePresence>
-          {images.map((src, index) => (
-            index === currentIndex && (
-              <motion.img
-                key={src}
-                src={src}
-                alt={`Slide ${index + 1}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 1 }}
-                className={styles.carouselImage}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  borderRadius: '15px',  // Round edges
-                  zIndex: 0,
-                }}
-              />
-            )
-          ))}
-        </AnimatePresence>
+    <>
+      <div className={styles.galleryGrid}>
+        {images.map((src, index) => (
+          <motion.div
+            key={index}
+            className={styles.galleryItem}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: index * 0.05 }}
+            whileHover={{ y: -8, scale: 1.02 }}
+            onClick={() => openLightbox(index)}
+          >
+            <img src={src} alt={`Adventure ${index + 1}`} className={styles.galleryImage} />
+            <div className={styles.galleryOverlay}>
+              <span className={styles.viewIcon}>🔍 View</span>
+            </div>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Navigation Buttons */}
-      <button className={styles.prev} onClick={handlePrev}>❮</button>
-      <button className={styles.next} onClick={handleNext}>❯</button>
-
-      {/* Pause/Resume Button */}
-      <button onClick={toggleAutoplay} className={styles.pauseButton}>
-        {isPlaying ? 'Pause' : 'Play'}
-      </button>
-
-      {/* Thumbnail Gallery */}
-      <div className={styles.thumbnailGallery}>
-        <div className={styles.thumbnailWrapper}>
-          {images.map((src, index) => (
-            <img
-              key={index}
-              src={src}
-              alt={`Thumbnail ${index + 1}`}
-              onClick={() => handleThumbnailClick(index)}
-              className={clsx(styles.thumbnail, {
-                [styles.activeThumbnail]: index === currentIndex,
-              })}
-              style={{
-                width: '80px',
-                height: '60px',
-                objectFit: 'cover',
-                margin: '5px',
-                cursor: 'pointer',
-                borderRadius: '4px',
-                border: index === currentIndex ? '2px solid #007BFF' : '1px solid gray',
-              }}
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxOpen && (
+          <motion.div
+            className={styles.lightbox}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeLightbox}
+          >
+            <button className={styles.lightboxClose} onClick={closeLightbox}>✕</button>
+            <button className={styles.lightboxPrev} onClick={(e) => { e.stopPropagation(); prevImage(); }}>❮</button>
+            <button className={styles.lightboxNext} onClick={(e) => { e.stopPropagation(); nextImage(); }}>❯</button>
+            
+            <motion.img
+              key={selectedImageIndex}
+              src={images[selectedImageIndex]}
+              alt={`Adventure ${selectedImageIndex + 1}`}
+              className={styles.lightboxImage}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
             />
-          ))}
-        </div>
-      </div>
-    </div>
+            
+            <div className={styles.lightboxCounter}>
+              {selectedImageIndex + 1} / {images.length}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -149,7 +141,10 @@ function RecentPosts({ posts }) {
         animate={{ opacity: 1 }}
         transition={{ duration: 1, delay: 0.5 }}
       >
-        <Heading as="h2">Recent Posts</Heading>
+        <Heading as="h2" className={styles.sectionTitle}>Recent Blog Posts</Heading>
+        <p className={styles.sectionDescription}>
+          Latest insights on tech solutions, projects, and outdoor adventures
+        </p>
       </motion.div>
 
       <div className="container">
@@ -166,22 +161,40 @@ function RecentPosts({ posts }) {
               <motion.div
                 key={index}
                 className="col col--4"
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.3 * index }}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 * index, ease: "easeOut" }}
+                whileHover={{ y: -8 }}
               >
-                <div className="card shadow--md">
+                <div className="card shadow--md" style={{ height: '100%' }}>
                   <div className="card__header">
                     <a href={post.metadata.permalink} style={{ textDecoration: 'none' }}>
                       <Heading as="h3">{post.metadata.title}</Heading>
                     </a>
                     {/* Render formatted date */}
-                    <p style={{ fontSize: '0.9rem', color: 'gray', marginTop: '0.5rem' }}>
-                      {formattedDate}
-                    </p>
+                    <div style={{ 
+                      fontSize: '0.85rem', 
+                      color: 'var(--ifm-color-emphasis-600)', 
+                      marginTop: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      <span>📅</span>
+                      <span>{formattedDate}</span>
+                    </div>
                   </div>
                   <div className="card__body">
                     <p>{post.metadata.description}</p>
+                  </div>
+                  <div className="card__footer">
+                    <a 
+                      href={post.metadata.permalink}
+                      className="button button--primary button--sm"
+                      style={{ width: '100%' }}
+                    >
+                      Read More →
+                    </a>
                   </div>
                 </div>
               </motion.div>
@@ -266,17 +279,24 @@ export default function HomepageFeatures() {
           <RecentPosts posts={recentPosts} />
         </div>
 
-        {/* New Section for Image Carousel */}
-        <div className="text--center" style={{ margin: '2rem 0' }}>
-          <Heading as="h2">A Glimpse of My / Our Adventures</Heading>
-          <p>
-            Explore some of the moments I've captured during my adventures. These images showcase the beauty of both nature and sports, capturing snapshots of hiking, outdoor activities, and some of the work I do. Feel free to browse and enjoy!
-          </p>
-        </div>
-
-        {/* Image Carousel */}
-        <div className="text--center" style={{ margin: '2rem 0' }}>
-          <ImageCarousel />
+        {/* Gallery Section */}
+        <div className={styles.gallerySection}>
+          <motion.div
+            className="text--center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.3 }}
+          >
+            <Heading as="h2" className={styles.sectionTitle}>
+              Adventure Gallery
+            </Heading>
+            <p className={styles.sectionDescription}>
+              A collection of moments captured during my adventures — from mountain peaks to tech projects. 
+              Click any image to explore in full detail.
+            </p>
+          </motion.div>
+          
+          <ImageGallery />
         </div>
       </div>
     </section>

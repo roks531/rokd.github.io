@@ -1,0 +1,793 @@
+---
+sidebar_position: 5
+---
+
+# High Availability with Patroni & etcd
+
+Complete guide for setting up a PostgreSQL high-availability cluster using Patroni for automatic failover and etcd for distributed configuration storage.
+
+## Overview
+
+This guide covers:
+- **Patroni**: PostgreSQL cluster management tool with automatic failover
+- **etcd**: Distributed key-value store for cluster state
+- **HAProxy**: Load balancing across PostgreSQL nodes
+- **Watchdog**: Prevention of split-brain scenarios
+
+## Architecture
+
+```
+                    ┌─────────────┐
+                    │   HAProxy   │
+                    │ 192.168.1.50│
+                    │  Port: 5000 │
+                    └──────┬──────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+   ┌────▼────┐        ┌────▼────┐       ┌────▼────┐
+   │ Node 1  │        │ Node 2  │       │ Node 3  │
+   │Patroni  │◄──────►│Patroni  │◄─────►│Patroni  │
+   │PostgreSQL│       │PostgreSQL│      │PostgreSQL│
+   │  etcd   │        │  etcd   │       │  etcd   │
+   └────┬────┘        └────┬────┘       └────┬────┘
+        │                  │                  │
+        └──────────────────┴──────────────────┘
+              etcd consensus cluster
+```
+
+## Prerequisites
+
+All three nodes should have:
+- Ubuntu/Debian-based Linux
+- Network connectivity between nodes
+- Root or sudo access
+- Same PostgreSQL version
+
+## Part 1: Install etcd on All Nodes
+
+etcd provides the distributed consensus needed for cluster coordination.
+
+### Install etcd
+
+On **all three nodes**:
+
+```bash
+# Download etcd
+ETCD_VER=v3.5.9
+GITHUB_URL=https://github.com/etcd-io/etcd/releases/download
+DOWNLOAD_URL=${GITHUB_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz
+
+# Download and extract
+curl -L ${DOWNLOAD_URL} -o /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+tar xzvf /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz -C /tmp
+
+# Install binaries
+sudo cp /tmp/etcd-${ETCD_VER}-linux-amd64/etcd* /usr/local/bin/
+sudo chmod +x /usr/local/bin/etcd*
+
+# Verify installation
+etcd --version
+```
+
+### Configure etcd
+
+Create etcd configuration directory:
+
+```bash
+sudo mkdir -p /etc/etcd
+sudo mkdir -p /var/lib/etcd
+```
+
+Create etcd systemd service:
+
+```bash
+sudo nano /etc/systemd/system/etcd.service
+```
+
+**On Node 1** (192.168.1.51):
+
+```ini
+[Unit]
+Description=etcd key-value store
+Documentation=https://github.com/etcd-io/etcd
+After=network.target
+
+[Service]
+Type=notify
+User=etcd
+Environment=ETCD_DATA_DIR=/var/lib/etcd
+Environment=ETCD_NAME=node1
+Environment=ETCD_INITIAL_ADVERTISE_PEER_URLS=http://192.168.1.51:2380
+Environment=ETCD_LISTEN_PEER_URLS=http://192.168.1.51:2380
+Environment=ETCD_LISTEN_CLIENT_URLS=http://192.168.1.51:2379,http://127.0.0.1:2379
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://192.168.1.51:2379
+Environment=ETCD_INITIAL_CLUSTER_TOKEN=patroni-cluster
+Environment=ETCD_INITIAL_CLUSTER=node1=http://192.168.1.51:2380,node2=http://192.168.1.52:2380,node3=http://192.168.1.53:2380
+Environment=ETCD_INITIAL_CLUSTER_STATE=new
+ExecStart=/usr/local/bin/etcd
+Restart=always
+RestartSec=10s
+LimitNOFILE=40000
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**On Node 2** (192.168.1.52):
+
+```ini
+[Unit]
+Description=etcd key-value store
+Documentation=https://github.com/etcd-io/etcd
+After=network.target
+
+[Service]
+Type=notify
+User=etcd
+Environment=ETCD_DATA_DIR=/var/lib/etcd
+Environment=ETCD_NAME=node2
+Environment=ETCD_INITIAL_ADVERTISE_PEER_URLS=http://192.168.1.52:2380
+Environment=ETCD_LISTEN_PEER_URLS=http://192.168.1.52:2380
+Environment=ETCD_LISTEN_CLIENT_URLS=http://192.168.1.52:2379,http://127.0.0.1:2379
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://192.168.1.52:2379
+Environment=ETCD_INITIAL_CLUSTER_TOKEN=patroni-cluster
+Environment=ETCD_INITIAL_CLUSTER=node1=http://192.168.1.51:2380,node2=http://192.168.1.52:2380,node3=http://192.168.1.53:2380
+Environment=ETCD_INITIAL_CLUSTER_STATE=new
+ExecStart=/usr/local/bin/etcd
+Restart=always
+RestartSec=10s
+LimitNOFILE=40000
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**On Node 3** (192.168.1.53):
+
+```ini
+[Unit]
+Description=etcd key-value store
+Documentation=https://github.com/etcd-io/etcd
+After=network.target
+
+[Service]
+Type=notify
+User=etcd
+Environment=ETCD_DATA_DIR=/var/lib/etcd
+Environment=ETCD_NAME=node3
+Environment=ETCD_INITIAL_ADVERTISE_PEER_URLS=http://192.168.1.53:2380
+Environment=ETCD_LISTEN_PEER_URLS=http://192.168.1.53:2380
+Environment=ETCD_LISTEN_CLIENT_URLS=http://192.168.1.53:2379,http://127.0.0.1:2379
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://192.168.1.53:2379
+Environment=ETCD_INITIAL_CLUSTER_TOKEN=patroni-cluster
+Environment=ETCD_INITIAL_CLUSTER=node1=http://192.168.1.51:2380,node2=http://192.168.1.52:2380,node3=http://192.168.1.53:2380
+Environment=ETCD_INITIAL_CLUSTER_STATE=new
+ExecStart=/usr/local/bin/etcd
+Restart=always
+RestartSec=10s
+LimitNOFILE=40000
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Create etcd User
+
+On **all nodes**:
+
+```bash
+sudo useradd -r -s /bin/false etcd
+sudo chown -R etcd:etcd /var/lib/etcd
+```
+
+### Start etcd
+
+On **all nodes**:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable etcd
+sudo systemctl start etcd
+sudo systemctl status etcd
+```
+
+### Verify etcd Cluster
+
+On any node:
+
+```bash
+etcdctl member list
+etcdctl endpoint health
+```
+
+Expected output:
+```
+127.0.0.1:2379 is healthy: successfully committed proposal: took = 1.234ms
+192.168.1.51:2379 is healthy: successfully committed proposal: took = 1.567ms
+192.168.1.52:2379 is healthy: successfully committed proposal: took = 1.890ms
+```
+
+## Part 2: Install PostgreSQL on All Nodes
+
+Install PostgreSQL on **all three nodes**:
+
+```bash
+# Add PostgreSQL repository
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+# Import repository key
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+
+# Update and install
+sudo apt-get update
+sudo apt-get install -y postgresql-15 postgresql-contrib-15
+
+# Stop PostgreSQL (Patroni will manage it)
+sudo systemctl stop postgresql
+sudo systemctl disable postgresql
+```
+
+## Part 3: Install Patroni on All Nodes
+
+Patroni manages the PostgreSQL cluster and handles automatic failover.
+
+### Install Dependencies
+
+On **all nodes**:
+
+```bash
+sudo apt-get install -y python3-pip python3-dev libpq-dev
+sudo pip3 install patroni[etcd] psycopg2-binary
+```
+
+### Configure Patroni
+
+Create Patroni configuration directory:
+
+```bash
+sudo mkdir -p /etc/patroni
+```
+
+**On Node 1** (192.168.1.51):
+
+```bash
+sudo nano /etc/patroni/patroni.yml
+```
+
+```yaml
+scope: postgres-cluster
+namespace: /db/
+name: node1
+
+restapi:
+  listen: 192.168.1.51:8008
+  connect_address: 192.168.1.51:8008
+
+etcd:
+  hosts: 192.168.1.51:2379,192.168.1.52:2379,192.168.1.53:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_connections: 100
+        max_wal_senders: 10
+        wal_keep_size: 256MB
+        max_prepared_transactions: 0
+        max_locks_per_transaction: 64
+        track_commit_timestamp: "off"
+
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+
+  pg_hba:
+  - host replication replicator 127.0.0.1/32 scram-sha-256
+  - host replication replicator 192.168.1.0/24 scram-sha-256
+  - host all all 0.0.0.0/0 scram-sha-256
+
+  users:
+    admin:
+      password: admin_password
+      options:
+        - createrole
+        - createdb
+    replicator:
+      password: replicator_password
+      options:
+        - replication
+
+postgresql:
+  listen: 192.168.1.51:5432
+  connect_address: 192.168.1.51:5432
+  data_dir: /var/lib/postgresql/15/main
+  bin_dir: /usr/lib/postgresql/15/bin
+  pgpass: /tmp/pgpass
+  authentication:
+    replication:
+      username: replicator
+      password: replicator_password
+    superuser:
+      username: postgres
+      password: postgres_password
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'
+
+tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false
+```
+
+**On Node 2** (192.168.1.52):
+
+Create `/etc/patroni/patroni.yml` with the same content, but change:
+- `name: node2`
+- `restapi.listen: 192.168.1.52:8008`
+- `restapi.connect_address: 192.168.1.52:8008`
+- `postgresql.listen: 192.168.1.52:5432`
+- `postgresql.connect_address: 192.168.1.52:5432`
+
+**On Node 3** (192.168.1.53):
+
+Create `/etc/patroni/patroni.yml` with the same content, but change:
+- `name: node3`
+- `restapi.listen: 192.168.1.53:8008`
+- `restapi.connect_address: 192.168.1.53:8008`
+- `postgresql.listen: 192.168.1.53:5432`
+- `postgresql.connect_address: 192.168.1.53:5432`
+
+:::warning Important
+Make sure to change the passwords in production! The passwords shown here are examples only.
+:::
+
+### Create Patroni Systemd Service
+
+On **all nodes**:
+
+```bash
+sudo nano /etc/systemd/system/patroni.service
+```
+
+```ini
+[Unit]
+Description=Patroni PostgreSQL High-Availability Manager
+After=syslog.target network.target etcd.service
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+ExecStart=/usr/local/bin/patroni /etc/patroni/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Set Permissions
+
+On **all nodes**:
+
+```bash
+sudo chown postgres:postgres /etc/patroni/patroni.yml
+sudo chmod 600 /etc/patroni/patroni.yml
+```
+
+### Start Patroni
+
+**Important**: Start Patroni **one node at a time**, waiting for each to initialize:
+
+```bash
+# On Node 1 first
+sudo systemctl daemon-reload
+sudo systemctl enable patroni
+sudo systemctl start patroni
+sudo systemctl status patroni
+
+# Wait 30 seconds, then on Node 2
+sudo systemctl daemon-reload
+sudo systemctl enable patroni
+sudo systemctl start patroni
+
+# Wait 30 seconds, then on Node 3
+sudo systemctl daemon-reload
+sudo systemctl enable patroni
+sudo systemctl start patroni
+```
+
+### Verify Cluster Status
+
+On any node:
+
+```bash
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+Expected output:
+```
++ Cluster: postgres-cluster ----+----+-----------+
+| Member | Host          | Role  | State   | TL | Lag in MB |
++--------+---------------+-------+---------+----+-----------+
+| node1  | 192.168.1.51 | Leader| running |  1 |           |
+| node2  | 192.168.1.52 | Replica| running |  1 |         0 |
+| node3  | 192.168.1.53 | Replica| running |  1 |         0 |
++--------+---------------+-------+---------+----+-----------+
+```
+
+## Part 4: HAProxy Setup
+
+HAProxy distributes client connections across the PostgreSQL cluster.
+
+### Install HAProxy
+
+On a separate server (or on one of the nodes):
+
+```bash
+sudo apt-get install -y haproxy
+```
+
+### Configure HAProxy
+
+```bash
+sudo nano /etc/haproxy/haproxy.cfg
+```
+
+```conf
+global
+    maxconn 100
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    log     global
+    mode    tcp
+    retries 2
+    timeout client 30m
+    timeout connect 4s
+    timeout server 30m
+    timeout check 5s
+
+listen stats
+    mode http
+    bind *:7000
+    stats enable
+    stats uri /
+
+listen postgres_write
+    bind *:5000
+    option httpchk GET /
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+    server node1 192.168.1.51:5432 maxconn 100 check port 8008
+    server node2 192.168.1.52:5432 maxconn 100 check port 8008
+    server node3 192.168.1.53:5432 maxconn 100 check port 8008
+
+listen postgres_read
+    bind *:5001
+    option httpchk GET /replica
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+    server node1 192.168.1.51:5432 maxconn 100 check port 8008
+    server node2 192.168.1.52:5432 maxconn 100 check port 8008
+    server node3 192.168.1.53:5432 maxconn 100 check port 8008
+```
+
+### Start HAProxy
+
+```bash
+sudo systemctl enable haproxy
+sudo systemctl restart haproxy
+sudo systemctl status haproxy
+```
+
+### Test HAProxy
+
+View stats dashboard:
+```
+http://192.168.1.50:7000
+```
+
+Connect to primary (write):
+```bash
+psql -h 192.168.1.50 -p 5000 -U admin postgres
+```
+
+Connect to replicas (read):
+```bash
+psql -h 192.168.1.50 -p 5001 -U admin postgres
+```
+
+## Part 5: Testing Failover
+
+### Manual Failover
+
+Promote a replica to leader:
+
+```bash
+# On any node
+patronictl -c /etc/patroni/patroni.yml switchover
+```
+
+You'll be prompted to confirm the switchover.
+
+### Simulate Node Failure
+
+Stop Patroni on the current leader:
+
+```bash
+# On the leader node
+sudo systemctl stop patroni
+```
+
+Patroni will automatically promote a replica within 30 seconds (TTL setting).
+
+Check cluster status:
+
+```bash
+patronictl -c /etc/patroni/patroni.yml list
+```
+
+The former replica should now be the leader.
+
+### Restore Failed Node
+
+Start Patroni again:
+
+```bash
+sudo systemctl start patroni
+```
+
+The node will automatically rejoin as a replica.
+
+## Part 6: Monitoring
+
+### Check Cluster Status
+
+```bash
+# List cluster members
+patronictl -c /etc/patroni/patroni.yml list
+
+# Show detailed history
+patronictl -c /etc/patroni/patroni.yml history
+
+# Check configuration
+patronictl -c /etc/patroni/patroni.yml show-config
+```
+
+### Check etcd Cluster
+
+```bash
+# Member list
+etcdctl member list
+
+# Cluster health
+etcdctl endpoint health --cluster
+
+# Get cluster configuration
+etcdctl get --prefix /db/
+```
+
+### Monitor HAProxy
+
+View HAProxy stats:
+```
+http://192.168.1.50:7000
+```
+
+Check HAProxy logs:
+```bash
+sudo tail -f /var/log/haproxy.log
+```
+
+### PostgreSQL Monitoring
+
+On any node:
+
+```bash
+# Check replication status
+psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+
+# Check if node is in recovery
+psql -U postgres -c "SELECT pg_is_in_recovery();"
+
+# Check replication lag
+psql -U postgres -c "SELECT client_addr, state, sync_state, 
+  pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS lag_bytes 
+  FROM pg_stat_replication;"
+```
+
+## Automation with autobase
+
+For automated deployment of PostgreSQL HA clusters, consider using the **autobase** project by Vitaly Kukharik.
+
+### About autobase
+
+Repository: [https://github.com/vitabaks/autobase](https://github.com/vitabaks/autobase)
+
+**autobase** is an Ansible-based automation tool for deploying PostgreSQL high-availability clusters with:
+- Patroni for automatic failover
+- etcd/Consul/ZooKeeper for DCS
+- HAProxy or pgBouncer for connection pooling
+- Optional monitoring with Prometheus/Grafana
+
+### Features
+
+- One-command cluster deployment
+- Support for cloud providers (AWS, GCP, Azure, DigitalOcean)
+- Automatic SSL certificate generation
+- Backup configuration (pgBackRest, WAL-G)
+- Monitoring stack setup
+- Rolling updates
+
+### Quick Start with autobase
+
+```bash
+# Clone repository
+git clone https://github.com/vitabaks/autobase.git
+cd autobase
+
+# Install requirements
+pip3 install -r requirements.txt
+
+# Edit inventory
+nano inventory
+
+# Configure variables
+nano vars/main.yml
+
+# Deploy cluster
+ansible-playbook deploy_pgcluster.yml
+```
+
+## Troubleshooting
+
+### Patroni Won't Start
+
+Check logs:
+```bash
+sudo journalctl -u patroni -f
+```
+
+Common issues:
+- PostgreSQL data directory already exists (remove it for fresh install)
+- Wrong permissions on `/etc/patroni/patroni.yml`
+- etcd not accessible
+- Port conflicts (5432, 8008)
+
+### etcd Connection Failed
+
+Check etcd is running:
+```bash
+sudo systemctl status etcd
+etcdctl endpoint health
+```
+
+Test connectivity:
+```bash
+curl http://192.168.1.51:2379/health
+```
+
+### Split-Brain Scenario
+
+If cluster shows multiple leaders:
+
+1. Stop Patroni on all nodes:
+```bash
+sudo systemctl stop patroni
+```
+
+2. Clear etcd cluster data:
+```bash
+etcdctl del --prefix /db/
+```
+
+3. Start Patroni one node at a time:
+```bash
+# Node 1
+sudo systemctl start patroni
+# Wait 30s
+# Node 2
+sudo systemctl start patroni
+# Wait 30s
+# Node 3
+sudo systemctl start patroni
+```
+
+### HAProxy Shows All Nodes Down
+
+Check Patroni REST API is accessible:
+```bash
+curl http://192.168.1.51:8008/
+```
+
+Should return HTTP 200 for leader, 503 for replica.
+
+Verify HAProxy can reach nodes:
+```bash
+sudo tcpdump -i any port 8008
+```
+
+## Best Practices
+
+1. **Use Odd Number of Nodes**: 3 or 5 nodes for quorum
+2. **Monitor etcd Health**: Critical for cluster consensus
+3. **Set Appropriate TTL**: Balance between fast failover and stability
+4. **Use Synchronous Replication**: For zero data loss
+5. **Regular Backup Testing**: Patroni is not a backup solution
+6. **Monitor Replication Lag**: Alert on excessive lag
+7. **Document Failover Procedures**: Train your team
+8. **Test Failover Regularly**: In development/staging
+9. **Use Watchdog**: Prevent split-brain scenarios (advanced)
+10. **Secure Communications**: Use SSL/TLS in production
+
+## Security Enhancements
+
+### Enable SSL for PostgreSQL
+
+Generate certificates:
+```bash
+# On all nodes
+sudo -u postgres openssl req -new -x509 -days 365 -nodes \
+  -text -out /var/lib/postgresql/15/main/server.crt \
+  -keyout /var/lib/postgresql/15/main/server.key \
+  -subj "/CN=postgres"
+
+sudo chmod 600 /var/lib/postgresql/15/main/server.key
+```
+
+Update `patroni.yml`:
+```yaml
+postgresql:
+  parameters:
+    ssl: on
+    ssl_cert_file: '/var/lib/postgresql/15/main/server.crt'
+    ssl_key_file: '/var/lib/postgresql/15/main/server.key'
+```
+
+### Secure etcd with TLS
+
+Generate certificates for etcd:
+```bash
+# Create CA and certificates
+# See etcd security documentation
+```
+
+Update etcd service to use TLS.
+
+### Restrict Network Access
+
+Use firewall rules:
+```bash
+# Allow only cluster nodes
+sudo ufw allow from 192.168.1.0/24 to any port 2379  # etcd client
+sudo ufw allow from 192.168.1.0/24 to any port 2380  # etcd peer
+sudo ufw allow from 192.168.1.0/24 to any port 5432  # PostgreSQL
+sudo ufw allow from 192.168.1.0/24 to any port 8008  # Patroni REST API
+```
+
+## Additional Resources
+
+- [Patroni Documentation](https://patroni.readthedocs.io/)
+- [etcd Documentation](https://etcd.io/docs/)
+- [HAProxy Documentation](https://www.haproxy.org/#docs)
+- [autobase GitHub](https://github.com/vitabaks/autobase)
+- [PostgreSQL High Availability](https://www.postgresql.org/docs/current/high-availability.html)

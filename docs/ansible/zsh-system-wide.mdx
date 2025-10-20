@@ -1,0 +1,811 @@
+---
+sidebar_position: 1
+---
+
+# Install ZSH System-Wide with Ansible
+
+Automated installation and configuration of ZSH with Oh-My-Zsh, Powerlevel10k theme, and useful plugins for multiple users across multiple servers.
+
+## Overview
+
+This Ansible playbook installs and configures:
+- **ZSH shell**: Modern shell with powerful features
+- **Oh-My-Zsh**: Framework for managing ZSH configuration
+- **Powerlevel10k**: Beautiful and fast ZSH theme
+- **Plugins**: zsh-autosuggestions and zsh-syntax-highlighting
+- **System-wide configuration**: Apply to multiple users simultaneously
+
+## Project Structure
+
+```
+ansible-zsh/
+├── zsh-playbook.yml          # Main Ansible playbook
+├── hosts.ini                 # Inventory file with target hosts
+└── files/
+    ├── zshrc                 # ZSH configuration file
+    └── p10k.zsh             # Powerlevel10k theme configuration
+```
+
+## Prerequisites
+
+### On Control Node (Your Machine)
+
+- Ansible installed (version 2.9+)
+- SSH access to target servers
+- SSH key-based authentication configured
+
+Install Ansible:
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install ansible
+
+# RHEL/Rocky/AlmaLinux
+sudo dnf install ansible
+
+# macOS
+brew install ansible
+```
+
+### On Target Servers
+
+- SSH server running
+- Sudo privileges for the Ansible user
+- Internet connection for downloading packages
+
+## Part 1: Inventory Configuration
+
+Create `hosts.ini` to define your target servers:
+
+```ini
+[hosts]
+192.168.1.10 ansible_user=admin
+192.168.1.11 ansible_user=admin
+192.168.1.12 ansible_user=admin
+192.168.1.13 ansible_user=sysadmin
+
+# Optional: Use localhost
+# localhost ansible_connection=local
+```
+
+### Inventory Explanation
+
+- `192.168.1.10`: Target server IP address
+- `ansible_user=admin`: SSH user with sudo privileges
+- `[hosts]`: Group name (referenced in playbook as `hosts: all`)
+
+### Multiple Groups
+
+You can organize servers into groups:
+
+```ini
+[webservers]
+192.168.1.10 ansible_user=admin
+192.168.1.11 ansible_user=admin
+
+[databases]
+192.168.1.20 ansible_user=dbadmin
+192.168.1.21 ansible_user=dbadmin
+
+[development]
+192.168.1.30 ansible_user=developer
+```
+
+Then target specific groups in your playbook:
+
+```yaml
+hosts: webservers  # Only web servers
+# or
+hosts: all         # All servers
+```
+
+## Part 2: The Playbook
+
+Create `zsh-playbook.yml`:
+
+```yaml
+---
+- name: Install and configure zsh
+  hosts: all
+  become: yes
+
+  vars:
+    users:
+      - name: admin
+        home: /home/admin
+      - name: developer
+        home: /home/developer
+      - name: root
+        home: /root
+
+  tasks:
+
+    - name: Install zsh using package manager
+      package:
+        name: zsh
+        state: present
+
+    - name: Install util-linux-user on RHEL-based systems
+      dnf:
+        name: "util-linux-user,git,tar"
+        state: present
+      when: "'RedHat' in ansible_distribution or 'Rocky' in ansible_distribution or 'AlmaLinux' in ansible_distribution"
+
+    - name: Modify /etc/pam.d/chsh for unrestricted chsh
+      lineinfile:
+        path: /etc/pam.d/chsh
+        regexp: '^auth\s+required\s+pam_shells.so'
+        line: 'auth sufficient pam_shells.so'
+        state: present
+        backup: yes
+
+    - name: Change shell for users
+      command: chsh -s /usr/bin/zsh {{ item.name }}
+      loop: "{{ users }}"
+
+    - name: Check if .oh-my-zsh exists
+      stat:
+        path: ~/.oh-my-zsh
+      register: oh_my_zsh_stat
+
+    - name: Install .oh-my-zsh
+      become_user: "{{ item.name }}"
+      shell: "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | /bin/sh"
+      loop: "{{ users }}"
+      when: not oh_my_zsh_stat.stat.exists
+
+    - name: Clone powerlevel10k theme for users
+      git:
+        repo: "https://github.com/romkatv/powerlevel10k.git"
+        dest: "{{ item.home }}/.oh-my-zsh/custom/themes/powerlevel10k"
+        depth: 1
+      loop: "{{ users }}"
+
+    - name: Clone zsh-autosuggestions plugin
+      git:
+        repo: "https://github.com/zsh-users/zsh-autosuggestions.git"
+        dest: "{{ item.home }}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
+      loop: "{{ users }}"
+
+    - name: Clone zsh-syntax-highlighting plugin
+      git:
+        repo: "https://github.com/zsh-users/zsh-syntax-highlighting.git"
+        dest: "{{ item.home }}/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting"
+      loop: "{{ users }}"
+
+    - name: Copy zshrc file
+      copy:
+        src: "files/zshrc"
+        dest: "{{ item.home }}/.zshrc"
+      loop: "{{ users }}"
+
+    - name: Copy p10k.zsh file
+      copy:
+        src: "files/p10k.zsh"
+        dest: "{{ item.home }}/.p10k.zsh"
+      loop: "{{ users }}"
+```
+
+### Playbook Breakdown
+
+#### Variables Section
+
+```yaml
+vars:
+  users:
+    - name: admin
+      home: /home/admin
+    - name: developer
+      home: /home/developer
+    - name: root
+      home: /root
+```
+
+Define all users who should get ZSH. Add or remove users as needed.
+
+#### Key Tasks
+
+1. **Install ZSH**: Uses generic `package` module (works on Debian, Ubuntu, RHEL, Rocky, etc.)
+2. **Install utilities**: On RHEL-based systems, installs `util-linux-user` (provides `chsh`), git, and tar
+3. **Modify PAM**: Allows changing shell without restriction
+4. **Change shell**: Sets ZSH as default shell for each user
+5. **Install Oh-My-Zsh**: Downloads and installs the framework
+6. **Clone theme/plugins**: Installs Powerlevel10k theme and useful plugins
+7. **Copy configs**: Deploys your custom `.zshrc` and `.p10k.zsh` files
+
+## Part 3: Configuration Files
+
+### Create files Directory
+
+```bash
+mkdir -p files
+```
+
+### files/zshrc
+
+Create `files/zshrc` with your ZSH configuration:
+
+```bash
+# Enable Powerlevel10k instant prompt
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Path to oh-my-zsh installation
+export ZSH="$HOME/.oh-my-zsh"
+
+# Set theme
+ZSH_THEME="powerlevel10k/powerlevel10k"
+
+# Plugins
+plugins=(
+  git
+  docker
+  kubectl
+  zsh-autosuggestions
+  zsh-syntax-highlighting
+)
+
+source $ZSH/oh-my-zsh.sh
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# Custom aliases
+alias ll='ls -lah'
+alias update='sudo dnf update -y'
+alias reload='source ~/.zshrc'
+
+# Environment variables
+export EDITOR='vim'
+export VISUAL='vim'
+```
+
+### files/p10k.zsh
+
+The `p10k.zsh` file contains Powerlevel10k theme configuration. You can:
+
+**Option 1**: Generate it by running `p10k configure` on your machine, then copy the generated `~/.p10k.zsh` to `files/p10k.zsh`
+
+**Option 2**: Use a basic configuration (the file is ~4000 lines, so it's best to copy from an existing setup)
+
+**Option 3**: Let users configure it themselves after deployment by running `p10k configure`
+
+:::tip Quick Setup
+If you don't have a `p10k.zsh` file yet:
+1. Install ZSH and Powerlevel10k locally
+2. Run `p10k configure` and follow the wizard
+3. Copy the generated `~/.p10k.zsh` to your `files/` directory
+:::
+
+## Part 4: Running the Playbook
+
+### Test Connection
+
+First, verify Ansible can reach your servers:
+
+```bash
+ansible -i hosts.ini all -m ping
+```
+
+Expected output:
+```
+192.168.1.10 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+192.168.1.11 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+### Dry Run (Check Mode)
+
+Test the playbook without making changes:
+
+```bash
+ansible-playbook -i hosts.ini zsh-playbook.yml --check
+```
+
+### Execute Playbook
+
+Run the playbook:
+
+```bash
+ansible-playbook -i hosts.ini zsh-playbook.yml
+```
+
+### Execute with Verbose Output
+
+For debugging:
+
+```bash
+ansible-playbook -i hosts.ini zsh-playbook.yml -v
+# or more verbose
+ansible-playbook -i hosts.ini zsh-playbook.yml -vvv
+```
+
+### Target Specific Hosts
+
+Run only on specific servers:
+
+```bash
+# Single host
+ansible-playbook -i hosts.ini zsh-playbook.yml --limit 192.168.1.10
+
+# Multiple hosts
+ansible-playbook -i hosts.ini zsh-playbook.yml --limit 192.168.1.10,192.168.1.11
+
+# Specific group
+ansible-playbook -i hosts.ini zsh-playbook.yml --limit webservers
+```
+
+## Part 5: Verification
+
+### SSH into Server
+
+```bash
+ssh admin@192.168.1.10
+```
+
+You should automatically be in ZSH with the Powerlevel10k prompt.
+
+### Verify Shell
+
+```bash
+echo $SHELL
+# Output: /usr/bin/zsh
+
+which zsh
+# Output: /usr/bin/zsh
+```
+
+### Check Oh-My-Zsh
+
+```bash
+ls -la ~/.oh-my-zsh
+```
+
+### Check Plugins
+
+```bash
+ls ~/.oh-my-zsh/custom/plugins/
+# Output: zsh-autosuggestions  zsh-syntax-highlighting
+```
+
+### Check Theme
+
+```bash
+ls ~/.oh-my-zsh/custom/themes/
+# Output: powerlevel10k
+```
+
+### Test Autosuggestions
+
+Start typing a command you've used before, and you should see gray suggestions.
+
+### Test Syntax Highlighting
+
+Commands should be colored (green for valid, red for invalid).
+
+## Part 6: Customization
+
+### Add More Users
+
+Edit the `vars` section in the playbook:
+
+```yaml
+vars:
+  users:
+    - name: admin
+      home: /home/admin
+    - name: developer
+      home: /home/developer
+    - name: johndoe
+      home: /home/johndoe
+    - name: janedoe
+      home: /home/janedoe
+    - name: root
+      home: /root
+```
+
+### Add More Plugins
+
+Edit `files/zshrc` and add plugins to the array:
+
+```bash
+plugins=(
+  git
+  docker
+  kubectl
+  docker-compose
+  npm
+  node
+  python
+  pip
+  ansible
+  terraform
+  aws
+  zsh-autosuggestions
+  zsh-syntax-highlighting
+)
+```
+
+Available plugins: [Oh-My-Zsh Plugins](https://github.com/ohmyzsh/ohmyzsh/wiki/Plugins)
+
+### Custom Aliases
+
+Add to `files/zshrc`:
+
+```bash
+# System shortcuts
+alias update='sudo dnf update -y'
+alias install='sudo dnf install'
+alias remove='sudo dnf remove'
+
+# Navigation
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+# Git shortcuts
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline'
+
+# Docker shortcuts
+alias dps='docker ps'
+alias di='docker images'
+alias dex='docker exec -it'
+alias dlogs='docker logs -f'
+
+# Custom
+alias c='clear'
+alias h='history'
+alias reload='source ~/.zshrc'
+```
+
+### Configure for Specific Distributions
+
+Add conditional tasks based on OS:
+
+```yaml
+- name: Install additional packages on Ubuntu
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - fonts-powerline
+    - zsh-doc
+  when: ansible_distribution == "Ubuntu"
+
+- name: Install additional packages on Rocky Linux
+  dnf:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - powerline-fonts
+    - zsh-html
+  when: ansible_distribution == "Rocky"
+```
+
+## Part 7: Advanced Configuration
+
+### Use Ansible Vault for Sensitive Data
+
+If you need to store sensitive information:
+
+```bash
+# Create encrypted file
+ansible-vault create secrets.yml
+```
+
+Add variables:
+```yaml
+admin_password: "SecurePassword123"
+```
+
+Reference in playbook:
+```yaml
+vars_files:
+  - secrets.yml
+```
+
+Run with vault password:
+```bash
+ansible-playbook -i hosts.ini zsh-playbook.yml --ask-vault-pass
+```
+
+### Use SSH Key Authentication
+
+Generate SSH key on control node:
+
+```bash
+ssh-keygen -t ed25519 -C "ansible@controlnode"
+```
+
+Copy to target servers:
+
+```bash
+ssh-copy-id admin@192.168.1.10
+ssh-copy-id admin@192.168.1.11
+ssh-copy-id admin@192.168.1.12
+```
+
+Update `hosts.ini` to use specific SSH key:
+
+```ini
+[hosts]
+192.168.1.10 ansible_user=admin ansible_ssh_private_key_file=~/.ssh/ansible_key
+192.168.1.11 ansible_user=admin ansible_ssh_private_key_file=~/.ssh/ansible_key
+```
+
+### Install Fonts (Optional)
+
+For proper Powerlevel10k appearance, install Nerd Fonts:
+
+Add to playbook:
+
+```yaml
+- name: Download and install MesloLGS NF font
+  block:
+    - name: Create fonts directory
+      file:
+        path: /usr/share/fonts/truetype/meslo
+        state: directory
+        mode: '0755'
+
+    - name: Download MesloLGS NF fonts
+      get_url:
+        url: "https://github.com/romkatv/powerlevel10k-media/raw/master/{{ item }}"
+        dest: "/usr/share/fonts/truetype/meslo/{{ item }}"
+      loop:
+        - MesloLGS%20NF%20Regular.ttf
+        - MesloLGS%20NF%20Bold.ttf
+        - MesloLGS%20NF%20Italic.ttf
+        - MesloLGS%20NF%20Bold%20Italic.ttf
+
+    - name: Update font cache
+      command: fc-cache -f -v
+```
+
+:::note
+Fonts are installed system-wide. Users need to configure their terminal emulator to use "MesloLGS NF" font.
+:::
+
+## Part 8: Troubleshooting
+
+### Playbook Fails with Permission Denied
+
+**Issue**: SSH connection fails or sudo doesn't work
+
+**Solution**: 
+```bash
+# Test SSH connection
+ssh admin@192.168.1.10
+
+# Test sudo access
+ssh admin@192.168.1.10 'sudo whoami'
+# Should output: root
+```
+
+If sudo requires password, add `--ask-become-pass`:
+```bash
+ansible-playbook -i hosts.ini zsh-playbook.yml --ask-become-pass
+```
+
+### Oh-My-Zsh Installation Fails
+
+**Issue**: `curl` command fails or times out
+
+**Solution**: Check internet connectivity on target servers
+```bash
+ansible -i hosts.ini all -m shell -a "curl -I https://raw.githubusercontent.com"
+```
+
+### Shell Doesn't Change
+
+**Issue**: Users still have bash after running playbook
+
+**Solution**: Check if `/usr/bin/zsh` exists in `/etc/shells`
+```bash
+ansible -i hosts.ini all -m shell -a "cat /etc/shells"
+```
+
+If missing, add it:
+```yaml
+- name: Add zsh to /etc/shells
+  lineinfile:
+    path: /etc/shells
+    line: /usr/bin/zsh
+    state: present
+```
+
+### Plugins Don't Work
+
+**Issue**: Autosuggestions or syntax highlighting not working
+
+**Solution**: Verify plugins are loaded in `.zshrc`:
+```bash
+ssh admin@192.168.1.10 'grep "plugins=" ~/.zshrc'
+```
+
+Ensure plugins are in the array:
+```bash
+plugins=(
+  git
+  zsh-autosuggestions
+  zsh-syntax-highlighting
+)
+```
+
+### Powerlevel10k Not Showing
+
+**Issue**: Prompt shows `[oh-my-zsh]` instead of Powerlevel10k
+
+**Solution**: 
+1. Check theme is set correctly in `.zshrc`:
+```bash
+ZSH_THEME="powerlevel10k/powerlevel10k"
+```
+
+2. Verify theme directory exists:
+```bash
+ssh admin@192.168.1.10 'ls ~/.oh-my-zsh/custom/themes/'
+```
+
+3. Run configuration wizard:
+```bash
+ssh admin@192.168.1.10
+p10k configure
+```
+
+## Part 9: Idempotency
+
+The playbook is idempotent - safe to run multiple times:
+
+```bash
+# First run: Installs everything
+ansible-playbook -i hosts.ini zsh-playbook.yml
+
+# Second run: Skips already completed tasks (changed=0 for most tasks)
+ansible-playbook -i hosts.ini zsh-playbook.yml
+```
+
+Output on second run:
+```
+PLAY RECAP *************************************************
+192.168.1.10  : ok=12   changed=0   unreachable=0   failed=0
+192.168.1.11  : ok=12   changed=0   unreachable=0   failed=0
+```
+
+## Part 10: Uninstall (Optional)
+
+To revert changes:
+
+```yaml
+---
+- name: Uninstall ZSH configuration
+  hosts: all
+  become: yes
+
+  vars:
+    users:
+      - name: admin
+        home: /home/admin
+      - name: developer
+        home: /home/developer
+
+  tasks:
+    - name: Change shell back to bash
+      command: chsh -s /bin/bash {{ item.name }}
+      loop: "{{ users }}"
+
+    - name: Remove .oh-my-zsh directory
+      file:
+        path: "{{ item.home }}/.oh-my-zsh"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Remove .zshrc
+      file:
+        path: "{{ item.home }}/.zshrc"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Remove .p10k.zsh
+      file:
+        path: "{{ item.home }}/.p10k.zsh"
+        state: absent
+      loop: "{{ users }}"
+
+    - name: Uninstall zsh package
+      package:
+        name: zsh
+        state: absent
+```
+
+## Best Practices
+
+1. ✅ **Use SSH keys** instead of passwords
+2. ✅ **Test in development** before production
+3. ✅ **Use version control** for playbooks (git)
+4. ✅ **Document changes** in commit messages
+5. ✅ **Keep backups** of original configs
+6. ✅ **Use --check mode** before executing
+7. ✅ **Limit users** to only those who need ZSH
+8. ✅ **Monitor disk space** (Oh-My-Zsh + plugins = ~50MB per user)
+9. ✅ **Regular updates** to plugins and theme
+10. ✅ **User training** on ZSH features and shortcuts
+
+## Additional Resources
+
+- [Ansible Documentation](https://docs.ansible.com/)
+- [Oh-My-Zsh GitHub](https://github.com/ohmyzsh/ohmyzsh)
+- [Powerlevel10k GitHub](https://github.com/romkatv/powerlevel10k)
+- [ZSH Documentation](https://zsh.sourceforge.io/Doc/)
+- [Ansible Best Practices](https://docs.ansible.com/ansible/latest/tips_tricks/ansible_tips_tricks.html)
+
+## Example Output
+
+Successful playbook execution:
+
+```
+PLAY [Install and configure zsh] ***************************
+
+TASK [Gathering Facts] *************************************
+ok: [192.168.1.10]
+ok: [192.168.1.11]
+
+TASK [Install zsh using package manager] *******************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Install util-linux-user on RHEL-based systems] ******
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Modify /etc/pam.d/chsh for unrestricted chsh] *******
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Change shell for users] ******************************
+changed: [192.168.1.10] => (item={'name': 'admin', 'home': '/home/admin'})
+changed: [192.168.1.11] => (item={'name': 'admin', 'home': '/home/admin'})
+
+TASK [Check if .oh-my-zsh exists] **************************
+ok: [192.168.1.10]
+ok: [192.168.1.11]
+
+TASK [Install .oh-my-zsh] **********************************
+changed: [192.168.1.10] => (item={'name': 'admin', 'home': '/home/admin'})
+changed: [192.168.1.11] => (item={'name': 'admin', 'home': '/home/admin'})
+
+TASK [Clone powerlevel10k theme for users] ****************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Clone zsh-autosuggestions plugin] ********************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Clone zsh-syntax-highlighting plugin] ****************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Copy zshrc file] *************************************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+TASK [Copy p10k.zsh file] **********************************
+changed: [192.168.1.10]
+changed: [192.168.1.11]
+
+PLAY RECAP *************************************************
+192.168.1.10  : ok=12   changed=10   unreachable=0   failed=0
+192.168.1.11  : ok=12   changed=10   unreachable=0   failed=0
+```

@@ -223,7 +223,18 @@ const config = {
             className: "header-github-link",
             "aria-label": "GitHub repository",
           },
-          
+          {
+            href: 'https://www.researchgate.net/profile/Rok-Damjanic',
+            position: "right",
+            className: "header-researchgate-link",
+            "aria-label": "Researchgate",
+          },
+          {
+            href: 'https://gorskopleme.wordpress.com/',
+            position: "right",
+            className: "header-gorskopleme-link",
+            "aria-label": "Gorsko pleme",
+          },
         ],
       },
       footer: {

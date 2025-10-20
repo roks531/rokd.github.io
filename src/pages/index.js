@@ -3,6 +3,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
+import ScrollToTop from '@site/src/components/ScrollToTop';
 import Translate, { translate } from '@docusaurus/Translate';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
@@ -34,6 +35,7 @@ export default function Home() {
       <main>
         <HomepageFeatures />
       </main>
+      <ScrollToTop />
     </Layout>
   );
 }

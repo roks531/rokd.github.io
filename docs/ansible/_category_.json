@@ -1,0 +1,8 @@
+{
+  "label": "Ansible",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Ansible automation guides and playbooks for system administration tasks."
+  }
+}

@@ -1,0 +1,260 @@
+---
+sidebar_position: 2
+---
+
+# Proxmox NVMe ZFS Mirror Setup
+
+A step-by-step guide to create a ZFS mirror for your Proxmox system disk using NVMe drives. This provides redundancy for your root pool, protecting your system from drive failure.
+
+## Prerequisites
+
+- Proxmox VE installed on a single NVMe drive
+- A second NVMe drive of equal or larger size
+- UEFI boot mode (check with `proxmox-boot-tool status`)
+- Root access to your Proxmox host
+
+:::warning Data Safety
+This process modifies disk partitions. While it shouldn't affect existing data on the first drive, always ensure you have backups before proceeding.
+:::
+
+## Step 1: Identify Your Disks
+
+List all available disks and their partitions:
+
+```bash
+fdisk -l
+lsblk
+```
+
+Identify which disk you want to add to the mirror (e.g., `/dev/nvme1n1`).
+
+## Step 2: Create GPT Partition Table
+
+Initialize the new disk with GPT partitioning:
+
+```bash
+gdisk /dev/nvme1n1
+```
+
+In the gdisk interactive prompt:
+
+```
+o      # Create a new empty GPT partition table
+n      # Create new partition
+       # Press Enter for default start sector
++1G    # End sector (match the size of your first disk's EFI partition)
+ef00   # EFI System partition type code
+w      # Write changes and exit
+```
+
+:::info EFI Partition Size
+Match the size of your existing EFI partition. Use `lsblk` to check the size on your first drive (usually around 512MB to 1GB).
+:::
+
+## Step 3: Replicate Partition Table
+
+Copy the partition layout from your existing boot drive to the new drive:
+
+```bash
+sgdisk /dev/nvme0n1 -R /dev/nvme1n1
+```
+
+Where:
+- `/dev/nvme0n1` is your **existing** boot drive
+- `/dev/nvme1n1` is your **new** drive
+
+:::tip Understanding -R
+The `-R` argument replicates the entire partition table, including all GUIDs. This creates an exact copy of the partition structure.
+:::
+
+## Step 4: Randomize GUIDs
+
+Generate unique GUIDs for the new drive:
+
+```bash
+sgdisk -G /dev/nvme1n1
+```
+
+This ensures the new drive has different partition GUIDs than your boot drive, which is necessary for proper operation.
+
+## Step 5: Verify Boot Configuration
+
+Check your bootloader type:
+
+```bash
+proxmox-boot-tool status
+```
+
+Look for the word "UEFI" in the output. If you see "Grub" instead, this guide may not apply to your setup.
+
+:::warning
+This guide is specifically for UEFI boot mode. If you're using Grub, you'll need different steps.
+:::
+
+## Step 6: Format the EFI Partition
+
+Format the EFI system partition on the new disk:
+
+```bash
+proxmox-boot-tool format /dev/nvme1n1p2 --force
+```
+
+Where `/dev/nvme1n1p2` is the EFI partition on your new drive.
+
+## Step 7: Initialize the Boot Partition
+
+Initialize the Proxmox boot tool on the new drive:
+
+```bash
+proxmox-boot-tool init /dev/nvme1n1p2
+```
+
+This configures the new drive to be bootable.
+
+## Step 8: Check ZFS Pool Status
+
+View your current ZFS pool configuration:
+
+```bash
+zpool status
+```
+
+Look for the device ID of your existing root pool partition. It will look something like:
+```
+nvme-eui.0025385591b0008b-part3
+```
+
+Copy this device ID for the next step.
+
+## Step 9: Attach the Mirror
+
+Attach the new drive to create a ZFS mirror:
+
+```bash
+zpool attach rpool nvme-eui.0025385591b0008b-part3 /dev/nvme1n1p3
+```
+
+Where:
+- `rpool` is your root pool name
+- `nvme-eui.0025385591b0008b-part3` is the device ID from step 8
+- `/dev/nvme1n1p3` is the largest partition on your new drive
+
+:::info Finding Partitions
+Use `lsblk` to identify partition numbers. The largest partition (usually p3) contains your ZFS root pool.
+:::
+
+## Step 10: Monitor Resilvering
+
+ZFS will now resilver (copy) all data to the new drive:
+
+```bash
+zpool status
+```
+
+You'll see a progress indicator. This can take several hours depending on the amount of data.
+
+Example output:
+```
+  resilvering: 45% done, 2h30m to go
+```
+
+## Verification
+
+Once resilvering is complete, verify your mirror:
+
+```bash
+zpool status rpool
+```
+
+You should see both drives listed in a MIRROR configuration:
+
+```
+NAME                                    STATE     READ WRITE CKSUM
+rpool                                   ONLINE       0     0     0
+  mirror-0                              ONLINE       0     0     0
+    nvme-eui.0025385591b0008b-part3    ONLINE       0     0     0
+    nvme-eui.e8238fa6bf530001-part3    ONLINE       0     0     0
+```
+
+Check boot configuration:
+
+```bash
+proxmox-boot-tool status
+```
+
+Both drives should be listed as boot devices.
+
+## Testing the Mirror
+
+To test if the mirror works:
+
+1. Power down the system
+2. Physically disconnect one NVMe drive
+3. Boot the system - it should boot normally from the remaining drive
+4. Check ZFS status - you'll see the missing drive as UNAVAIL
+
+:::caution
+This is an optional test. Only perform if you're comfortable with hardware changes.
+:::
+
+## Troubleshooting
+
+### Mirror Not Syncing
+- Verify both drives are the same size or the second is larger
+- Check `dmesg` for any disk errors
+- Ensure you used the correct partition numbers
+
+### Boot Issues
+- Verify UEFI boot entries: `efibootmgr -v`
+- Reinitialize boot partition: `proxmox-boot-tool refresh`
+- Check BIOS boot order settings
+
+### Resilvering Stuck
+- Check system load: `top`
+- Monitor ZFS I/O: `zpool iostat rpool 5`
+- Verify no disk errors: `smartctl -a /dev/nvme1n1`
+
+## Maintenance
+
+### Monitoring Mirror Health
+
+Regular checks:
+
+```bash
+# Check pool health
+zpool status
+
+# Check disk SMART data
+smartctl -a /dev/nvme0n1
+smartctl -a /dev/nvme1n1
+
+# View ZFS events
+zpool events
+```
+
+### Replacing a Failed Drive
+
+If a drive fails:
+
+```bash
+# Replace the failed drive (assuming nvme1n1 failed)
+zpool replace rpool /dev/nvme1n1p3 /dev/nvme2n1p3
+
+# Don't forget to reinstall the bootloader
+proxmox-boot-tool format /dev/nvme2n1p2 --force
+proxmox-boot-tool init /dev/nvme2n1p2
+```
+
+## Benefits of ZFS Mirror
+
+- **Redundancy**: System survives a single drive failure
+- **Data Integrity**: ZFS checksums protect against silent corruption
+- **Easy Recovery**: Automatic resilvering when replacing drives
+- **No Performance Loss**: Mirror can improve read performance
+
+## Additional Resources
+
+- [Proxmox ZFS Documentation](https://pve.proxmox.com/wiki/ZFS_on_Linux)
+- [ZFS Administration Guide](https://openzfs.github.io/openzfs-docs/)
+- [Proxmox Boot Tool Documentation](https://pve.proxmox.com/wiki/Host_Bootloader)
+

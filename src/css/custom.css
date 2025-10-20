@@ -15,6 +15,9 @@
   --ifm-color-primary-lightest: #3cad6e;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --ifm-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --ifm-heading-font-weight: 700;
+  --ifm-line-height-base: 1.6;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
@@ -29,6 +32,25 @@
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }
 
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Improved text rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Better heading spacing */
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  letter-spacing: -0.02em;
+}
+
 
 .buttons {
   display: flex;
@@ -40,20 +62,22 @@
 }
 /* Default styles */
 html[data-theme='light'] .hero {
-  background-color: #ffffff; /* White background */
+  background-color: #ffffff;
   background-image: url("/static/img/background2.png");
-  background-repeat: no-repeat; /* Prevent the background image from repeating */
+  background-repeat: no-repeat;
   background-attachment: fixed;
-  background-size: 100% auto; /* Make the background image fill the width */
+  background-size: 100% auto;
+  background-position: center top;
 }
 
 /* Default styles */
 html[data-theme='dark'] .hero {
-  background-color: #1b1b1d; /* White background */
+  background-color: #1b1b1d;
   background-image: url("/static/img/background2.png");
-  background-repeat: no-repeat; /* Prevent the background image from repeating */
-  background-size: 100% auto; /* Make the background image fill the width */
-  background-position: center; /* Position the background image in the center */
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: 100% auto;
+  background-position: center top;
 }
 
 html[data-theme='light'] .hero__title {
@@ -140,6 +164,31 @@ html[data-theme='dark'] .header-linkedin-link:before {
 /* Set background color for transparent parts */
 }
 
+.header-researchgate-link:before {
+  content: '';
+  display: inline-block;   /* Use inline-block for better baseline alignment */
+  width: 24px;
+  height: 24px;
+  background: url('/img/researchgate_logo.png') no-repeat;
+  background-size: contain;
+  vertical-align: middle;  /* Align icon vertically with surrounding text/icons */
+  margin-top: -2px;        /* Adjust up/down by a few pixels if needed */
+}
+
+
+.header-gorskopleme-link:before {
+  content: '';
+  display: inline-block;   /* Use inline-block for better baseline alignment */
+  width: 24px;
+  height: 24px;
+  background: url('/img/wat.png') no-repeat;
+  background-size: contain;
+  vertical-align: middle;  /* Align icon vertically with surrounding text/icons */
+  margin-top: -2px;
+}
+
+
+
 /* Custom styles to center and adjust the vertical position of the search bar in the navbar */
 .navbar__search {
   position: absolute;
@@ -149,9 +198,28 @@ html[data-theme='dark'] .header-linkedin-link:before {
 }
 
 /* Add thicker underline to navbar items on hover */
+nav.navbar .navbar__item {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
 nav.navbar .navbar__item:hover {
-  font-weight: bold;
-  border-bottom: 3px solid; /* Adjust the thickness as needed */
+  color: var(--ifm-color-primary);
+}
+
+nav.navbar .navbar__item::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 3px;
+  background: var(--ifm-color-primary);
+  transition: width 0.3s ease;
+}
+
+nav.navbar .navbar__item:hover::after {
+  width: 100%;
 }
 
 
@@ -161,23 +229,32 @@ nav.navbar .navbar__item:hover {
   display: block;
 }
 /* Change background color of navbar items */
-
 html[data-theme='light'] .navbar {
-  background-color: #eeeeee; /* Replace with your desired color code */
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 html[data-theme='light'] nav.navbar .navbar__items {
-  background-color: #eeeeee; /* Replace with your desired color code */
+  background-color: transparent;
+}
+
+html[data-theme='dark'] .navbar {
+  background-color: rgba(27, 27, 29, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
 }
 
 html[data-theme='light'] .footer {
-  padding: 0.5rem;
-  background-color: #eeeeee; /* Adjust the padding to control the height */
+  padding: 2rem 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-
 html[data-theme='dark'] .footer {
-  padding: 0.5rem;/* Adjust the padding to control the height */
+  padding: 2rem 0;
+  background: linear-gradient(180deg, #1b1b1d 0%, #141416 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 
@@ -230,57 +307,65 @@ html[data-theme='dark'] .footer {
 
 /* Styling for recent posts */
 .recent-posts {
-  margin-top: 40px;
+  margin-top: 60px;
+  margin-bottom: 60px;
 }
 
 .recent-posts .container {
   display: flex;
-  gap: 20px;
+  gap: 25px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .recent-posts .col {
   flex: 1 1 30%;
-  text-align: center;
-}
-
-/* .features_t9lD {
-  background: #34495e;
-} */
-/* Animation for the site logo */
-@keyframes moveUpAndDown {
-  0% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-  100% {
-    transform: translateY(0px);
-  }
-}
-
-.move-logo {
-  animation: moveUpAndDown 3s ease-in-out infinite;
-}
-
-
-.heroDescription {
-  font-size: 1.5rem;
-  color: #34495e;
-  margin-top: 10px;
+  min-width: 280px;
+  text-align: left;
 }
 
 html[data-theme='light'] .card {
-  background-color: #eeeeee;
-  border-radius: 10px;
-  padding: 20px;
-  transition: transform 0.2s;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
+html[data-theme='dark'] .card {
+  background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
 
 .card:hover {
-  transform: scale(1.02);
+  transform: translateY(-8px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+}
+
+html[data-theme='dark'] .card:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+}
+
+.card__header h3 {
+  margin-bottom: 0.5rem;
+  color: var(--ifm-heading-color);
+  font-weight: 700;
+  font-size: 1.3rem;
+  transition: color 0.2s ease;
+}
+
+.card__header h3:hover {
+  color: var(--ifm-color-primary);
+}
+
+.card__body p {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
 }
 
 html[data-theme='light'] #particles-js {
@@ -293,3 +378,126 @@ html[data-theme='light'] #particles-js {
   background: #ffffffea; /* Background color */
 }
 
+/* Scroll to top button */
+.scroll-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 50px;
+  height: 50px;
+  background: var(--ifm-color-primary);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  z-index: 999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.scroll-to-top.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.scroll-to-top:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Improved hero banner */
+.heroBanner_qdFl {
+  padding: 6rem 0;
+}
+
+/* Loading animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.8s ease-out;
+}
+
+/* Improved code blocks */
+pre {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Better link styles */
+a {
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Improved button styles */
+.button {
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.button--primary {
+  background: linear-gradient(135deg, var(--ifm-color-primary) 0%, var(--ifm-color-primary-dark) 100%);
+}
+
+.button--primary:hover {
+  background: linear-gradient(135deg, var(--ifm-color-primary-dark) 0%, var(--ifm-color-primary-darkest) 100%);
+}
+
+/* Card footer styling */
+.card__footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  margin-top: auto;
+}
+
+html[data-theme='dark'] .card__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive container max widths */
+.container {
+  max-width: 1400px;
+}
+
+/* Better spacing for sections */
+section {
+  padding: 4rem 0;
+}
+
+@media screen and (max-width: 996px) {
+  section {
+    padding: 3rem 0;
+  }
+  
+  .scroll-to-top {
+    bottom: 1rem;
+    right: 1rem;
+    width: 45px;
+    height: 45px;
+  }
+}
