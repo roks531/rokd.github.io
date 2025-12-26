@@ -1,0 +1,87 @@
+---
+slug: nepremicnine-net-playwright
+title: Obvestila za nepremicnine.net s Playwrightom
+authors: [rok]
+tags: [python, playwright, telegram, gmail, scraping]
+comments: true
+---
+
+# Ko `requests` odpove: Playwright bot za nepremicnine.net
+
+Na nepremicnine.net sem poskušal narediti preprost scraper z `requests`, pa je stran hitro vrnila zaščito/čudne HTML-je. Zato sem v projektu [nepremicnine.net-notify](https://github.com/roks531/nepremicnine.net-notify) preklopil na [Playwright](https://playwright.dev/) (Firefox), ki stran naloži kot pravi brskalnik in omogoča zanesljivo pobiranje novih oglasov.
+
+Skripta požene več iskalnih URL-jev, zbere povezave, preveri katere so nove glede na CSV, ter pošlje obvestila prek Telegrama ali e‑pošte (npr. Gmail). Spodaj je kratek vodič, povzet po README, kako jo pripraviti in pognati.
+
+## Zakaj Playwright namesto `requests`
+- Stran nalaga vsebino dinamično in uporablja zaščite proti botom; klasični HTTP klici vrnejo prazne ali blokirane odgovore.
+- Playwright simulira pravi browser (tu Firefox), zato pride čez zaščito in počaka, da se rezultati dejansko prikažejo.
+- Dodani so naključni zamiki, timeouti in ponovni poskusi, da scraper ostane stabilen in manj očiten.
+
+## Kaj skripta počne
+- Sprejme več `SEARCH_URLS` (npr. različne lokacije ali tipe oglasov).
+- Vsako stran odpre v Playwrightu, čaka na `networkidle` in pobere povezave oglasov.
+- Podpira paginacijo (`MAX_PAGES`) in ponovne poskuse na timeout.
+- Shranjuje vse videne povezave v `links.csv`, da pošilja samo nove oglase.
+- Pošilja obvestila na Telegram in/ali SMTP (Gmail z “App password”).
+
+## Hitri zagon
+```bash
+git clone https://github.com/roks531/nepremicnine.net-notify.git
+cd nepremicnine.net-notify
+cp .env.example .env    # izpolni svoje podatke
+
+# Odvisnosti
+uv sync                 # ali: pip install -r requirements.txt
+
+# Playwright brskalnik (Firefox)
+uv run playwright install firefox   # ali: python -m playwright install firefox
+
+# Pognaj
+uv run python nepremicnine_parse.py
+```
+
+Minimalen `.env` primer:
+```env
+SEARCH_URLS=https://www.nepremicnine.net/oglasi-prodaja/grosuplje/
+LINKS_FILE=links.csv
+MAX_PAGES=5
+SCRAPE_DELAY_MIN=3
+SCRAPE_DELAY_MAX=6
+SCRAPE_TIMEOUT_MS=45000
+SCRAPE_RETRIES=2
+
+TELEGRAM_ENABLED=true
+TELEGRAM_TOKEN=123456:abc
+TELEGRAM_CHAT_ID=123456789
+
+EMAIL_ENABLED=false # true ali false - jaz uporabljam samo telegram, 
+preverjeno pa deluje tudi z gmailom
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USERNAME=tvoj.gmail@gmail.com
+EMAIL_PASSWORD=app-password-iz-google
+EMAIL_FROM=tvoj.gmail@gmail.com
+EMAIL_TO=prejemnik1@gmail.com,prejemnik2@gmail.com
+```
+
+## Ključne nastavitve
+- **`SEARCH_URLS`**: URL-ji iskanj, ločeni z vejico ali novimi vrsticami.
+- **`MAX_PAGES`**: koliko strani na posamezen URL se pregleda.
+- **`SCRAPE_DELAY_MIN/MAX`** in **`SCRAPE_RETRIES`**: naključni zamik in število ponovitev ob timeout-u.
+- **`LINKS_FILE`**: CSV za sledenje že videnim oglasom (pusti v `.gitignore`).
+- **Telegram**: `TELEGRAM_ENABLED`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **E-pošta**: `EMAIL_ENABLED` + `EMAIL_*`; za Gmail obvezno dvofaktorska prijava in “App password”.
+
+## Samodejno poganjanje
+Za redna obvestila dodaj cron (primer vsako uro):
+```cron
+0 * * * * cd /pot/do/nepremicnine.net-notify && /usr/bin/env uv run python nepremicnine_parse.py >> /var/log/nepremicnine.log 2>&1
+```
+Na Windows uporabi Task Scheduler (Start a program → `uv.exe`/`python.exe` + pot do skripte).
+
+## Opombe iz prakse
+- Če se kakšna stran vseeno ustavi, povečaj `SCRAPE_TIMEOUT_MS` ali `SCRAPE_RETRIES`.
+- Playwright potrebuje Firefox in osnovne knjižnice (na Ubuntu jih dobiš z `apt-get install libnss3 ...`, kot piše v README).
+- Telegram obvestilo ima HTML povezave in izklop predogledov, da ostane pregledno; e‑pošta uporablja navadno besedilo.
+
+S tem nastaviš nezahteven, a zanesljiv bot, ki mimo zaščit nepremicnine.net pobere nove oglase in te pingne tam, kjer ti najbolj ustreza.
