@@ -1,0 +1,36 @@
+# Manjaro PipeWire auto switch
+
+### Problem
+On Manjaro, disconnecting a Bluetooth audio device left the built-in speakers muted until I ran `systemctl --user restart pipewire pipewire-pulse wireplumber`.
+
+### Quick fix
+Load the PulseAudio compatibility module once to restore routing:
+
+```bash
+pactl load-module module-switch-on-connect
+```
+
+### Permanent solution
+Configure PipeWire's PulseAudio layer to load the module automatically on startup:
+
+```bash
+mkdir -p ~/.config/pipewire/pipewire-pulse.conf.d/
+nano ~/.config/pipewire/pipewire-pulse.conf.d/switch-on-connect.conf
+```
+
+Add the following content:
+
+```ini
+context.exec = [
+    { path = "pactl" args = "load-module module-switch-on-connect" }
+]
+```
+
+Then restart PipeWire services:
+
+```bash
+systemctl --user restart pipewire pipewire-pulse wireplumber
+```
+
+### Test
+Re-connect and disconnect the Bluetooth device — audio should now fall back to the speakers without manual intervention.

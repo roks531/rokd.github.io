@@ -1,0 +1,29 @@
+# VirtualBox USB passthrough
+
+Quick steps to get USB passthrough working in VirtualBox.
+
+## Prepare the host
+
+Install VirtualBox Guest Additions in the guest. If the in-app download fails, grab the ISO from [download.virtualbox.org/virtualbox](https://download.virtualbox.org/virtualbox), mount the ISO in the VM, and run the installer from `C:/`.
+
+Add your user to the `vboxusers` group on the host, then reboot so the permission change applies:
+
+```bash
+sudo usermod -aG vboxusers $USER
+```
+
+## Verify USB visibility
+
+After reboot, confirm that VirtualBox sees USB devices:
+
+```bash
+VBoxManage list usbhost
+```
+
+## Optional: Extension Pack
+
+Install the Extension Pack if you need extra USB controller support (run on the host with the matching `.vbox-extpack` downloaded):
+
+```bash
+sudo VBoxManage extpack install Oracle_VirtualBox_Extension_Pack-7.2.2.vbox-extpack
+```
