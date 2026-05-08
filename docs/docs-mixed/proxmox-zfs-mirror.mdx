@@ -13,7 +13,7 @@ A step-by-step guide to create a ZFS mirror for your Proxmox system disk using N
 - UEFI boot mode (check with `proxmox-boot-tool status`)
 - Root access to your Proxmox host
 
-:::warning Data Safety
+:::warning[Data Safety]
 This process modifies disk partitions. While it shouldn't affect existing data on the first drive, always ensure you have backups before proceeding.
 :::
 
@@ -47,7 +47,7 @@ ef00   # EFI System partition type code
 w      # Write changes and exit
 ```
 
-:::info EFI Partition Size
+:::info[EFI Partition Size]
 Match the size of your existing EFI partition. Use `lsblk` to check the size on your first drive (usually around 512MB to 1GB).
 :::
 
@@ -63,7 +63,7 @@ Where:
 - `/dev/nvme0n1` is your **existing** boot drive
 - `/dev/nvme1n1` is your **new** drive
 
-:::tip Understanding -R
+:::tip[Understanding -R]
 The `-R` argument replicates the entire partition table, including all GUIDs. This creates an exact copy of the partition structure.
 :::
 
@@ -139,7 +139,7 @@ Where:
 - `nvme-eui.0025385591b0008b-part3` is the device ID from step 8
 - `/dev/nvme1n1p3` is the largest partition on your new drive
 
-:::info Finding Partitions
+:::info[Finding Partitions]
 Use `lsblk` to identify partition numbers. The largest partition (usually p3) contains your ZFS root pool.
 :::
 

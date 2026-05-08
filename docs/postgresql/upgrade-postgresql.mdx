@@ -10,7 +10,7 @@ Complete guide for upgrading PostgreSQL from one major version to another (e.g.,
 
 PostgreSQL major version upgrades require migrating data from the old version to the new one. The `pg_upgrade` tool provides a fast, in-place upgrade with minimal downtime using hard links.
 
-:::warning Before You Start
+:::warning[Before You Start]
 - **Backup your database** before starting the upgrade
 - Plan for downtime (though upgrade is usually fast)
 - Test the upgrade process in a development environment first
@@ -31,7 +31,7 @@ If you use PostGIS or other extensions:
 sudo dnf install postgis36_18
 ```
 
-:::tip Extension Versions
+:::tip[Extension Versions]
 Match extension versions to your PostgreSQL version. For example:
 - PostGIS 3.6 for PostgreSQL 18: `postgis36_18`
 - PostGIS 3.6 for PostgreSQL 17: `postgis36_17`
@@ -86,7 +86,7 @@ sudo -iu postgres /usr/pgsql-17/bin/pg_controldata /var/lib/pgsql/17/data \
 
 Expected output: `Data page checksum version: 1`
 
-:::info What are Data Checksums?
+:::info[What are Data Checksums?]
 Data checksums detect corruption in data files. They're recommended for production databases. The new cluster enables them by default.
 :::
 
@@ -105,7 +105,7 @@ sudo -iu postgres /usr/pgsql-18/bin/pg_upgrade \
 
 This performs compatibility checks without making changes.
 
-:::tip Understanding the Options
+:::tip[Understanding the Options]
 - `--old-bindir`: Path to old PostgreSQL binaries
 - `--new-bindir`: Path to new PostgreSQL binaries
 - `--old-datadir`: Path to old data directory
@@ -143,7 +143,7 @@ sudo -iu postgres /usr/pgsql-18/bin/pg_upgrade \
 Additional flags:
 - `-j "$(nproc)"`: Use all CPU cores for parallel processing (faster)
 
-:::caution Using --link
+:::caution[Using --link]
 The `--link` flag creates hard links instead of copying files. This is much faster but:
 - Old and new data directories must be on the same filesystem
 - You cannot revert to the old version without a backup
@@ -215,7 +215,7 @@ Common settings to check:
 - SSL settings
 - Authentication settings in `pg_hba.conf`
 
-:::warning Configuration Compatibility
+:::warning[Configuration Compatibility]
 Some configuration parameters may have changed between versions. Review the PostgreSQL release notes for deprecated or changed parameters.
 :::
 
@@ -251,7 +251,7 @@ sudo -iu postgres /usr/pgsql-18/bin/vacuumdb \
 
 This updates statistics for the query planner. The `--analyze-in-stages` option runs a fast analyze first, then a more thorough one.
 
-:::info Why VACUUM ANALYZE?
+:::info[Why VACUUM ANALYZE?]
 After upgrading, the new version needs to collect fresh statistics about your data for optimal query performance.
 :::
 
@@ -312,7 +312,7 @@ Remove old extensions:
 sudo dnf remove -y postgis36_17
 ```
 
-:::danger Before Cleanup
+:::danger[Before Cleanup]
 Only delete the old cluster after:
 - Confirming the new version works correctly
 - Testing all applications and connections
@@ -368,7 +368,7 @@ If you didn't use `--link` and kept the old data:
 
 3. Restore from backup if needed
 
-:::warning Rollback with --link
+:::warning[Rollback with --link]
 If you used `--link`, rollback is not possible without restoring from backup because the old data directory was modified.
 :::
 

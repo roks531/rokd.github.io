@@ -32,7 +32,7 @@ CREATE ROLE ldap_groups;
 
 These roles act as containers. All synced LDAP users will be members of `ldap_users`, and all synced groups will be members of `ldap_groups`.
 
-:::tip Grant Permissions
+:::tip[Grant Permissions]
 After sync, grant database permissions to these parent roles:
 ```sql
 GRANT CONNECT ON DATABASE mydb TO ldap_users;

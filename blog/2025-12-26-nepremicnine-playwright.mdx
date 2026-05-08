@@ -12,6 +12,8 @@ Na nepremicnine.net sem poskušal narediti preprost scraper z `requests`, pa je 
 
 Skripta požene več iskalnih URL-jev, zbere povezave, preveri katere so nove glede na CSV, ter pošlje obvestila prek Telegrama ali e‑pošte (npr. Gmail). Spodaj je kratek vodič, povzet po README, kako jo pripraviti in pognati.
 
+{/* truncate */}
+
 ## Zakaj Playwright namesto `requests`
 - Stran nalaga vsebino dinamično in uporablja zaščite proti botom; klasični HTTP klici vrnejo prazne ali blokirane odgovore.
 - Playwright simulira pravi browser (tu Firefox), zato pride čez zaščito in počaka, da se rezultati dejansko prikažejo.

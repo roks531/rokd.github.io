@@ -165,7 +165,7 @@ CREATE USER MAPPING FOR PUBLIC
     );
 ```
 
-:::warning Security Consideration
+:::warning[Security Consideration]
 Passwords are stored in plain text in `pg_user_mapping`. Consider using:
 - `.pgpass` file instead
 - SSL certificates for authentication
@@ -466,7 +466,7 @@ DBeaver can generate ER diagrams including foreign tables:
 2. Foreign tables appear with a different icon (⚡)
 3. Relationships between local and foreign tables are shown
 
-:::tip DBeaver Tip
+:::tip[DBeaver Tip]
 Use **Ctrl+Space** for autocomplete that includes foreign table columns!
 :::
 
@@ -524,7 +524,7 @@ WHERE id = 456;
 COMMIT;  -- or ROLLBACK;
 ```
 
-:::warning Transaction Limitations
+:::warning[Transaction Limitations]
 Two-phase commit is NOT supported. If the remote server crashes after commit, the transaction may be inconsistent.
 :::
 

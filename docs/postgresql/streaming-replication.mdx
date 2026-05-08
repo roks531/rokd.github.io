@@ -69,7 +69,7 @@ synchronous_standby_names = '*'
 - `synchronous_commit = remote_apply`: Wait for standby to apply changes
 - `synchronous_standby_names = '*'`: All standbys are synchronous
 
-:::info Synchronous vs Asynchronous
+:::info[Synchronous vs Asynchronous]
 **Synchronous** (`remote_apply`): Zero data loss, but slower commits
 **Asynchronous**: Faster, but potential data loss if primary fails
 :::
@@ -151,7 +151,7 @@ primary_conninfo = 'host=192.168.1.51 port=5432 user=rep_user password=YourSecur
 hot_standby = on
 ```
 
-:::tip Primary Connection String
+:::tip[Primary Connection String]
 The `primary_conninfo` tells the standby where to connect. Adjust the host, port, and credentials to match your primary server.
 :::
 

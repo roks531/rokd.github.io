@@ -26,10 +26,15 @@ const config = {
   projectName: 'rokd.github.io', // Usually your repo name.
   deploymentBranch: 'gh-pages',
   onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
   trailingSlash: false,
   future: {
-    experimental_faster: true,
+    v4: true,
+    faster: true,
+  },
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
   },
 
   // Even if you don't use internationalization, you can use this field to set
@@ -49,6 +54,7 @@ const config = {
   },
   // add search plugin
   plugins: [
+    './plugins/gtag-safe',
     [
       './plugins/recent-blog-posts',  // Path to your custom plugin
       {
@@ -85,7 +91,7 @@ const config = {
           anonymizeIP: true,
         },
         sitemap: {
-          lastmod: 'date', // Optionally add lastmod if you want to track when a page was last modified.
+          lastmod: null, // Avoid VCS-derived dates; this repo currently has a broken submodule entry.
           changefreq: 'weekly', // Set the crawl frequency for all pages 
           priority: 0.5, // Default priority for pages
           ignorePatterns: ['/tags/**'], // Exclude pages with paths matching these patterns

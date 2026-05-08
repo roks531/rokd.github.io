@@ -10,6 +10,8 @@ image: /img/blog_img/2024-12-23-paperles-ngx.png
 
 In this post, I will explain how I integrated LDAP authentication into [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx) using the `ldap3` library. By leveraging LDAP, we can centrally manage user authentication, ensuring secure and streamlined access to Paperless-ngx.
 
+{/* truncate */}
+
 ## Custom LDAP Authentication Backend
 
 The first step is creating a custom authentication backend. This backend uses `ldap3` to authenticate users against the LDAP directory. Below is the complete implementation also transfering groups from LDAP.

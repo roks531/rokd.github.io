@@ -31,7 +31,7 @@ Add a PAM authentication entry:
 host    all       all   0.0.0.0/0    pam             pamservice=postgresql
 ```
 
-:::info Connection Types
+:::info[Connection Types]
 - `local`: Unix socket connections
 - `host`: TCP/IP connections (with or without SSL)
 - `hostssl`: SSL-encrypted TCP/IP only
@@ -46,7 +46,7 @@ PostgreSQL needs to read the shadow file for authentication:
 sudo chmod 444 /etc/shadow
 ```
 
-:::warning Security Consideration
+:::warning[Security Consideration]
 This makes the shadow file readable by all users. While the passwords are still hashed, consider security implications in your environment. Alternative: add postgres user to shadow group.
 :::
 
@@ -187,7 +187,7 @@ account     sufficient  pam_ldap.so
 account     required    pam_permit.so
 ```
 
-:::tip sufficient vs required
+:::tip[sufficient vs required]
 - `sufficient`: If successful, no further modules are checked
 - `required`: Must succeed, but continues checking other modules
 - `requisite`: Must succeed, stops immediately if fails

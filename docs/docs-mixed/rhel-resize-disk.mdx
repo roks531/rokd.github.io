@@ -46,7 +46,7 @@ resizepart 2 100%  # Resize partition 2 to use 100% of disk
 quit               # Exit parted
 ```
 
-:::info Partition Numbers
+:::info[Partition Numbers]
 LVM typically uses partition 2 (`/dev/sda2`). Use `print` to confirm which partition number contains your LVM.
 :::
 
@@ -101,7 +101,7 @@ Example:
 lvresize --extents +100%FREE --resizefs /dev/almalinux/home
 ```
 
-:::tip --resizefs Flag
+:::tip[--resizefs Flag]
 The `--resizefs` flag automatically resizes the filesystem after expanding the logical volume. Without it, you'd need to run `resize2fs` (ext4) or `xfs_growfs` (xfs) manually.
 :::
 
@@ -249,7 +249,7 @@ Check with `vgdisplay` to confirm your exact name.
 
 Sometimes you may want to consolidate space by removing a separate logical volume (like `/home`) and merging it into root. This is useful when you don't need separate partitions.
 
-:::danger Data Loss Warning
+:::danger[Data Loss Warning]
 This process will **DELETE ALL DATA** on the logical volume being removed. Make sure you have backups or migrate data first!
 :::
 
@@ -298,7 +298,7 @@ sudo lvremove /dev/mapper/almalinux-home
 
 Type `y` to confirm deletion.
 
-:::tip Volume Path
+:::tip[Volume Path]
 The exact path may vary. Use `lvdisplay` to find your volume group and logical volume names. Common formats:
 - `/dev/mapper/almalinux-home`
 - `/dev/mapper/rhel-home`

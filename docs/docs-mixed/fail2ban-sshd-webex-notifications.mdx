@@ -1,0 +1,180 @@
+---
+sidebar_position: 4
+---
+
+# Fail2Ban for SSHD with Webex Notifications
+
+Set up Fail2Ban to send Webex bot alerts when `sshd` bans or unbans an IP.
+
+:::warning[Security Note]
+Never commit real bot tokens or room IDs to git. If a token was exposed, regenerate it immediately.
+:::
+
+## 1. Create a Webex bot
+
+Go to:
+
+```text
+https://developer.webex.com/my-apps
+```
+
+Create:
+
+```text
+New App → Bot
+```
+
+Copy the **Bot Access Token**.
+
+Add the bot to the target Webex room:
+
+```text
+Webex room → Add people → add bot email
+```
+
+Example bot email:
+
+```text
+fail2ban-alerts@webex.bot
+```
+
+## 2. Get the correct room ID
+
+Use the **bot token**, not your personal token:
+
+```bash
+curl -sS https://webexapis.com/v1/rooms \
+  -H "Authorization: Bearer YOUR_BOT_TOKEN" | python3 -m json.tool
+```
+
+Copy the full `"id"` value.
+
+Example dummy room ID:
+
+```text
+Y2lzY29zcGFyazovL3VybjpURUFNOmR1bW15L1JPT00vZHVtbXktcm9vbS1pZA
+```
+
+Do not use only the short UUID part.
+
+## 3. Test Webex manually
+
+```bash
+curl -sS -X POST https://webexapis.com/v1/messages \
+  -H "Authorization: Bearer YOUR_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary '{"roomId":"DUMMY_FULL_ROOM_ID","markdown":"🚨 **Fail2Ban test from bot**"}'
+```
+
+## 4. Create the Fail2Ban Webex action
+
+```bash
+sudo vi /etc/fail2ban/action.d/webex.conf
+```
+
+Paste:
+
+```ini
+[Definition]
+
+actionstart =
+actionstop =
+
+actionban = /usr/bin/curl -sS -X POST https://webexapis.com/v1/messages \
+  -H "Authorization: Bearer YOUR_BOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary "{\"roomId\":\"DUMMY_FULL_ROOM_ID\",\"markdown\":\"🚨 **Fail2Ban SSH BAN**\\n\\n**IP:** <ip>\\n**Jail:** <name>\\n**Host:** <fq-hostname>\"}"
+```
+
+Protect the file:
+
+```bash
+sudo chown root:root /etc/fail2ban/action.d/webex.conf
+sudo chmod 600 /etc/fail2ban/action.d/webex.conf
+```
+
+## 5. Copy jail config to local
+
+```bash
+sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+sudo vi /etc/fail2ban/jail.local
+```
+
+Find the `[sshd]` section and make sure it has Webex in the action list:
+
+```ini
+[sshd]
+enabled = true
+port    = ssh
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+maxretry = 2
+findtime = 10m
+bantime  = -1
+action   = iptables-multiport[name=sshd, port=ssh, protocol=tcp]
+           webex
+```
+
+## 6. Test Fail2Ban
+
+```bash
+sudo fail2ban-client -t
+sudo systemctl restart fail2ban
+sleep 5
+sudo fail2ban-client status sshd
+sudo fail2ban-client get sshd actions
+```
+
+You should see:
+
+```text
+iptables-multiport, webex
+```
+
+## 7. Test a manual ban
+
+```bash
+sudo fail2ban-client set sshd banip 1.2.3.4
+sudo fail2ban-client set sshd unbanip 1.2.3.4
+```
+
+A Webex message should appear.
+
+## 8. AlmaLinux / RHEL SELinux fix
+
+If manual curl works, but Fail2Ban does not send the Webex message, test SELinux:
+
+```bash
+getenforce
+sudo setenforce 0
+
+sudo fail2ban-client set sshd banip 1.2.3.5
+sudo fail2ban-client set sshd unbanip 1.2.3.5
+
+sudo setenforce 1
+```
+
+If it works with SELinux disabled, create a local SELinux policy:
+
+```bash
+sudo dnf install -y policycoreutils-python-utils
+sudo ausearch -m avc -ts recent | audit2allow -M fail2ban-webex
+sudo semodule -i fail2ban-webex.pp
+```
+
+Test again with SELinux enforcing:
+
+```bash
+getenforce
+sudo fail2ban-client set sshd banip 1.2.3.6
+sudo fail2ban-client set sshd unbanip 1.2.3.6
+```
+
+## Notes
+
+- Use a Webex bot token, not a personal developer token.
+- Personal Webex tokens expire after about 12 hours.
+- Add the bot to the room before using the room ID.
+- Get the room ID with the bot token.
+- Use the full Webex room ID, not the short UUID.
+- Regenerate any token that was pasted into chat or logs.
