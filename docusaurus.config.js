@@ -4,10 +4,44 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
+import {loadEnvFile} from 'node:process';
 import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 
+loadEnvFile();
+
+const algoliaAppId = process.env.ALGOLIA_APP_ID;
+const algoliaApiKey = process.env.ALGOLIA_API_KEY;
+const algoliaIndexName = process.env.ALGOLIA_INDEX_NAME;
+const googleAnalyticsTrackingId = process.env.GOOGLE_ANALYTICS_TRACKING_ID;
+const organizationName = process.env.SITE_ORGANIZATION_NAME;
+const projectName = process.env.SITE_PROJECT_NAME;
+
+const algoliaConfig = algoliaAppId && algoliaApiKey && algoliaIndexName
+  ? {
+      appId: algoliaAppId,
+      apiKey: algoliaApiKey,
+      indexName: algoliaIndexName,
+      contextualSearch: true,
+      searchParameters: {},
+      searchPagePath: 'search',
+    }
+  : undefined;
+
+const gtagConfig = googleAnalyticsTrackingId
+  ? {
+      trackingID: googleAnalyticsTrackingId,
+      anonymizeIP: true,
+    }
+  : undefined;
+
+const giscusConfig = {
+  repo: process.env.GISCUS_REPO,
+  repoId: process.env.GISCUS_REPO_ID,
+  category: process.env.GISCUS_CATEGORY,
+  categoryId: process.env.GISCUS_CATEGORY_ID,
+};
 
 const config = {
   title: "Rok Damjanić - Tech and Adventures",
@@ -22,8 +56,8 @@ const config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'roks531', // Usually your GitHub org/user name.
-  projectName: 'rokd.github.io', // Usually your repo name.
+  organizationName,
+  projectName,
   deploymentBranch: 'gh-pages',
   onBrokenLinks: 'warn',
   trailingSlash: false,
@@ -86,10 +120,7 @@ const config = {
         //   // editUrl:
         //   //   'https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/',
         // },
-        gtag: {
-          trackingID: 'G-W32HFNBE85', 
-          anonymizeIP: true,
-        },
+        gtag: gtagConfig,
         sitemap: {
           lastmod: null, // Avoid VCS-derived dates; this repo currently has a broken submodule entry.
           changefreq: 'weekly', // Set the crawl frequency for all pages 
@@ -103,41 +134,18 @@ const config = {
       }),
     ],
   ],
+  customFields: {
+    publicConfig: {
+      giscus: giscusConfig,
+    },
+  },
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       // Replace with your project's social card
       image: 'img/social-card.png',
-      algolia: {
-        // The application ID provided by Algolia
-        appId: 'JV67CWDNZ4',
-  
-        // Public API key: it is safe to commit it
-        apiKey: 'f8f4060cbdfc7e5dd0be1c88c1162a1c',
-  
-        indexName: 'rokd',
-  
-        // Optional: see doc section below
-        contextualSearch: true,
-  
-        // Optional: Specify domains where the navigation should occur through window.location instead on history.push. Useful when our Algolia config crawls multiple documentation sites and we want to navigate with window.location.href to them.
-        // externalUrlRegex: 'external\\.com|domain\\.com',
-  
-        // // Optional: Replace parts of the item URLs from Algolia. Useful when using the same search index for multiple deployments using a different baseUrl. You can use regexp or string in the `from` param. For example: localhost:3000 vs myCompany.com/docs
-        // replaceSearchResultPathname: {
-        //   from: '/docs/', // or as RegExp: /\/docs\//
-        //   to: '/',
-        // },
-  
-        // // Optional: Algolia search parameters
-        searchParameters: {},
-  
-        // // Optional: path for search page that enabled by default (`false` to disable it)
-        searchPagePath: 'search',
-  
-        //... other Algolia params
-      },
+      algolia: algoliaConfig,
       metadata: [
         { name: 'description', content: 'The official website of Rok Damjanić. Discover my projects, insights on tech, and my outdoor adventures.' },
         { name: 'keywords', content: 'Rok Damjanić, Damjanic, tech blog, hiking blog, projects, tech solutions' },

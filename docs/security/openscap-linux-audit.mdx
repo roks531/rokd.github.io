@@ -1,0 +1,198 @@
+---
+sidebar_position: 1
+title: OpenSCAP Audit on Linux
+description: Run OpenSCAP audits on Ubuntu, Debian, RHEL, Rocky Linux, AlmaLinux, and Fedora with report generation and optional remediation output.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# OpenSCAP Audit on Linux
+
+Use OpenSCAP with SCAP Security Guide content to audit a Linux host against a baseline such as CIS.
+
+:::warning[Before you start]
+Do not run automatic remediation on production blindly. Review the findings first and apply fixes one by one where possible.
+:::
+
+## Quick notes
+
+- On RHEL-family systems, the SCAP Security Guide content is usually shipped by the OS packages, so you normally do not need to download XML content from GitHub manually.
+- On Ubuntu and Debian, you may need to download the Security Guide data stream yourself if the exact content is not available from your package repositories.
+- Always verify the exact profile ID with `oscap info` before running the scan.
+- Run the scan as `root` or with `sudo`, otherwise several checks will be incomplete.
+
+## Audit workflow
+
+<Tabs>
+  <TabItem value="apt" label="Ubuntu / Debian (APT)" default>
+
+### 1. Install OpenSCAP and utilities
+
+Update package metadata and install the scanner plus tools needed to unpack the data stream archive.
+
+```bash
+sudo apt update
+sudo apt install -y openscap-scanner unzip curl
+```
+
+### 2. Download and load compliance content
+
+Download the Security Guide release, create the target directory, and extract only the Ubuntu data stream files.
+
+```bash
+SSG_VERSION="0.1.81"
+
+curl -LO "https://github.com/ComplianceAsCode/content/releases/download/v${SSG_VERSION}/scap-security-guide-${SSG_VERSION}.zip"
+
+sudo mkdir -p /usr/share/xml/scap/ssg/content/
+
+sudo unzip -j "scap-security-guide-${SSG_VERSION}.zip" "*/ssg-ubuntu*.xml" -d /usr/share/xml/scap/ssg/content/
+```
+
+### 3. Verify available profiles
+
+Check which profiles exist in the selected data stream before choosing one.
+
+```bash
+oscap info /usr/share/xml/scap/ssg/content/ssg-ubuntu2404-ds.xml
+```
+
+Look for profile IDs such as:
+
+```text
+xccdf_org.ssgproject.content_profile_cis_level1_server
+```
+
+### 4. Run the audit scan
+
+This example runs a CIS Level 1 server audit and writes both XML results and an HTML report.
+
+```bash
+sudo oscap xccdf eval \
+  --profile xccdf_org.ssgproject.content_profile_cis_level1_server \
+  --results ~/openscap-ubuntu2404-cis-l1-results.xml \
+  --report ~/openscap-ubuntu2404-cis-l1-report.html \
+  /usr/share/xml/scap/ssg/content/ssg-ubuntu2404-ds.xml
+```
+
+  </TabItem>
+  <TabItem value="dnf" label="RHEL / Rocky / Alma / Fedora (DNF)">
+
+### 1. Install OpenSCAP and Security Guide content
+
+On DNF-based systems, install both the scanner and the packaged SCAP Security Guide content.
+
+```bash
+sudo dnf install -y openscap-scanner scap-security-guide
+```
+
+If you want extra helper tools, add:
+
+```bash
+sudo dnf install -y openscap-utils
+```
+
+### 2. Verify that the packaged data stream exists
+
+In most cases, the package already places the content here:
+
+```bash
+ls -1 /usr/share/xml/scap/ssg/content/ssg-rhel*-ds.xml
+```
+
+For RHEL 9 / Rocky 9 / AlmaLinux 9, the common file is:
+
+```text
+/usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+```
+
+### 3. Verify available profiles
+
+Check the exact profile names before starting the audit.
+
+```bash
+oscap info /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+```
+
+Look for profile IDs such as:
+
+```text
+xccdf_org.ssgproject.content_profile_cis
+```
+
+### 4. Run the audit scan
+
+Generate both the raw XML results and a readable HTML report.
+
+```bash
+sudo oscap xccdf eval \
+  --profile xccdf_org.ssgproject.content_profile_cis \
+  --results ~/openscap-rhel9-cis-results.xml \
+  --report ~/openscap-rhel9-cis-report.html \
+  /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+```
+
+  </TabItem>
+</Tabs>
+
+## What is easy to miss
+
+- The profile string must match the exact data stream content on that machine. Do not assume the same profile ID exists across every distro release.
+- The data stream file name changes by OS version, for example `ssg-ubuntu2404-ds.xml` versus `ssg-rhel9-ds.xml`.
+- The HTML report is for humans; the XML results file is what you keep for later parsing or comparison.
+- Some checks depend on installed packages or running services. A clean result can still be misleading if the host is not representative.
+- Container images and minimal installs often need a different baseline than a full server.
+
+## Optional remediation
+
+Automatic remediation exists, but it is usually safer to review the findings and remediate manually.
+
+:::caution[Recommended approach]
+Use the scan output to identify failed rules, then fix them individually. That gives you far more control and reduces the chance of breaking SSH, auth, services, boot settings, or package policy unexpectedly.
+:::
+
+### Generate a remediation script
+
+If you still want a generated fix script for review, use `--fix-type bash --remediate` only after testing on a disposable machine first.
+
+```bash
+sudo oscap xccdf eval \
+  --profile xccdf_org.ssgproject.content_profile_cis \
+  --results ~/openscap-remediate-results.xml \
+  --report ~/openscap-remediate-report.html \
+  --fix-type bash \
+  --remediate \
+  /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml
+```
+
+That applies changes during evaluation. Safer alternatives are:
+
+- Generate a fix script for inspection first.
+- Review failed rules from the HTML report.
+- Apply only the specific changes you actually want.
+
+### Generate fixes without applying them immediately
+
+You can also export a script and inspect it before touching the system.
+
+```bash
+oscap xccdf generate fix \
+  --profile xccdf_org.ssgproject.content_profile_cis \
+  --fix-type bash \
+  /usr/share/xml/scap/ssg/content/ssg-rhel9-ds.xml \
+  > openscap-rhel9-cis-fix.sh
+```
+
+Review the script carefully before running it.
+
+## Output files
+
+Typical output files:
+
+- `~/openscap-ubuntu2404-cis-l1-results.xml`
+- `~/openscap-ubuntu2404-cis-l1-report.html`
+- `~/openscap-rhel9-cis-results.xml`
+- `~/openscap-rhel9-cis-report.html`
+
+Open the HTML report in a browser and work through failures one control at a time.

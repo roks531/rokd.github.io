@@ -3,3 +3,6 @@ node_modules/
 .docusaurus/
 blog_bck/
 docs_bck/
+.env
+.env.local
+.env.*.local

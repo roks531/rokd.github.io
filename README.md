@@ -1,5 +1,20 @@
 ### Installation
 
+### Environment Variables
+
+Create a local `.env` file from `.env.example` and fill in the values you want to expose to the built site:
+
+```bash
+cp .env.example .env
+```
+
+Important:
+
+- Anything used by Docusaurus pages or theme config is bundled into the static site and is therefore public.
+- Use env vars here for safer config management and easier rotation, not for true secrets.
+- True secrets must stay server-side and should never be consumed directly from client pages.
+- This includes IDs like Google Analytics measurement IDs, GitHub/Giscus repo IDs, and Algolia search config.
+
 ### Local Development
 
 ```
@@ -108,6 +123,4 @@ For example to add docusaurus-lunr-search use:
 And add `plugins: [require.resolve('docusaurus-lunr-search')],` to the docusaurus config file.
 
 Then all you need to do is `npm run build` and `npm run serve` to generate the indexes and test it.
-
-
 
