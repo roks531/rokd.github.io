@@ -9,7 +9,13 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 
-loadEnvFile();
+try {
+  loadEnvFile();
+} catch (error) {
+  if (error?.code !== 'ENOENT') {
+    throw error;
+  }
+}
 
 const algoliaAppId = process.env.ALGOLIA_APP_ID;
 const algoliaApiKey = process.env.ALGOLIA_API_KEY;
